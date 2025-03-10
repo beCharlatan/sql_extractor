@@ -1,0 +1,36 @@
+[project]
+name = "extract-parameter-agent"
+version = "0.1.0"
+description = "Production-ready AI agent application using Gigachat"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "gigachat",
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "python-dotenv",
+    "loguru",
+    "pytest",
+    "httpx",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "mypy",
+    "ruff",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
