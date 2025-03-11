@@ -8,9 +8,9 @@ from src.agent.sql_generator import SQLGenerator
 from src.api.models import GenerateSQLRequest, GenerateSQLResponse, SQLComponents
 from src.utils.errors import (
     APIError,
+    DatabaseError,
     GigachatAPIError,
     InvalidSQLError,
-    InvalidTableDDLError,
     SQLGenerationError,
     ValidationError,
     handle_exception,
@@ -39,7 +39,9 @@ def get_gigachat_agent():
 # Dependency to get the SQL generator
 def get_sql_generator(agent: GigachatAgent = Depends(get_gigachat_agent)):
     """Dependency to get a SQL generator instance."""
-    return SQLGenerator(agent=agent)
+    from src.db.db_schema_tool import DBSchemaReferenceTool
+    db_schema_tool = DBSchemaReferenceTool()
+    return SQLGenerator(agent=agent, db_schema_tool=db_schema_tool)
 
 
 @client_router.post(
@@ -63,6 +65,13 @@ def get_sql_generator(agent: GigachatAgent = Depends(get_gigachat_agent)):
                             "order_by_clause": "rating DESC",
                             "limit_clause": "10",
                             "full_sql": "WHERE category = 'electronics' AND price < 1000\nORDER BY rating DESC\nLIMIT 10"
+                        },
+                        "parameters": {
+                            "category": "electronics",
+                            "price_max": 1000,
+                            "sort_by": "rating",
+                            "sort_order": "desc",
+                            "limit": 10
                         }
                     }
                 }
@@ -133,12 +142,10 @@ async def generate_sql(
         logger.info("Generating SQL components and structured parameters")
         logger.debug(f"Filter: {request.filter}")
         logger.debug(f"Constraint: {request.constraint}")
-        logger.debug(f"Table DDL: {request.table_ddl}")
         
         generator_result = sql_generator.generate_sql_components(
             filter_text=request.filter,
             constraint_text=request.constraint,
-            table_ddl=request.table_ddl,
         )
         
         # Create the response with SQL components only
@@ -151,8 +158,8 @@ async def generate_sql(
 
         return result
 
-    except (ValidationError, InvalidTableDDLError, InvalidSQLError) as e:
-        # Эти ошибки связаны с валидацией входных данных
+    except (ValidationError, DatabaseError, InvalidSQLError) as e:
+        # Эти ошибки связаны с валидацией входных данных или доступом к БД
         handle_exception(e)
         raise e.to_http_exception()
     except GigachatAPIError as e:

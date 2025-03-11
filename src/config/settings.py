@@ -40,12 +40,27 @@ class LoggingSettings(BaseModel):
     log_file: Optional[str] = Field(default=os.getenv("LOG_FILE", None))
 
 
+class DatabaseSettings(BaseModel):
+    """Database configuration settings."""
+
+    host: str = Field(default=os.getenv("DB_HOST", "localhost"))
+    port: int = Field(default=int(os.getenv("DB_PORT", "5432")))
+    name: str = Field(default=os.getenv("DB_NAME", "parameters_db"))
+    user: str = Field(default=os.getenv("DB_USER", "postgres"))
+    password: str = Field(default=os.getenv("DB_PASSWORD", "postgres_password"))
+
+    def get_connection_string(self) -> str:
+        """Get the database connection string."""
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+
+
 class Settings(BaseModel):
     """Global application settings."""
 
     api: APISettings = Field(default_factory=APISettings)
     gigachat: GigachatSettings = Field(default_factory=GigachatSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
 
     def dict_config(self) -> Dict[str, Any]:
         """Convert settings to a dictionary."""

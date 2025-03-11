@@ -1,20 +1,23 @@
 # AI Agent Application with Gigachat
 
-A production-ready AI agent application built with Python, using Gigachat as the underlying language model.
+A production-ready AI agent application built with Python, using Gigachat as the underlying language model and PostgreSQL for database operations.
 
 ## Features
 
 - Robust API for interacting with Gigachat
 - Parameter extraction capabilities
 - SQL query generation from natural language inputs
+- PostgreSQL database integration for schema reference
 - Table DDL-based context for accurate SQL generation
 - Comprehensive logging and error handling
-- Containerized deployment support
+- Containerized deployment with Docker
 - Extensive test coverage
 
 ## Requirements
 
 - Python 3.13+
+- PostgreSQL database
+- Docker and Docker Compose (for containerized deployment)
 - Gigachat API credentials
 
 ## Installation
@@ -39,10 +42,17 @@ A production-ready AI agent application built with Python, using Gigachat as the
    pip install -e .
    ```
 
-4. Create a `.env` file with your Gigachat API credentials:
+4. Create a `.env` file with your Gigachat API credentials and PostgreSQL connection settings:
    ```
    GIGACHAT_API_KEY=your_api_key_here
    GIGACHAT_CREDENTIALS_PATH=/path/to/credentials.json  # If applicable
+   
+   # PostgreSQL connection settings
+   POSTGRES_HOST=localhost
+   POSTGRES_PORT=5432
+   POSTGRES_DB=postgres
+   POSTGRES_USER=postgres
+   POSTGRES_PASSWORD=postgres
    ```
 
 ## Usage
@@ -70,22 +80,36 @@ Optional arguments:
 
 ### Starting the API server
 
+#### Running locally
+
 ```bash
 python -m src.api.main
 ```
 
 The API will be available at `http://localhost:8000`.
 
+#### Running with Docker
+
+```bash
+docker-compose up -d
+```
+
+This will start both the PostgreSQL database and the API service. The API will be available at `http://localhost:8000`.
+
 ### Using the agent programmatically
 
 ```python
 from src.agent.sql_generator import SQLGenerator
+from src.db.db_schema_tool import DBSchemaReferenceTool
 
-generator = SQLGenerator()
+# Initialize with a specific table name
+db_tool = DBSchemaReferenceTool()
+generator = SQLGenerator(db_schema_tool=db_tool)
+
+# Generate SQL components
 result = generator.generate_sql_components(
     filter_text="Find products in the electronics category with price less than 1000",
-    constraint_text="Sort by highest rating and limit to 10 results",
-    table_ddl="CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100) NOT NULL, category VARCHAR(50), price DECIMAL(10, 2), rating DECIMAL(3, 2), stock INT DEFAULT 0);",
+    constraint_text="Sort by highest rating and limit to 10 results"
 )
 
 print("Parameters:", result["parameters"])
@@ -99,15 +123,14 @@ print("SQL Components:", result["sql_components"])
 
 ### Using the SQL Generation Feature
 
-The API generates SQL query components (WHERE, ORDER BY, and LIMIT clauses) and extracts structured parameters based on natural language filter and constraint inputs. It uses the provided table DDL as context to interpret these inputs as table attributes.
+The API generates SQL query components (WHERE, ORDER BY, and LIMIT clauses) and extracts structured parameters based on natural language filter and constraint inputs. It uses the PostgreSQL database schema as context to interpret these inputs as table attributes.
 
 #### Example Request
 
 ```json
 {
   "filter": "Find products in the electronics category with price less than 1000",
-  "constraint": "Sort by highest rating and limit to 10 results",
-  "table_ddl": "CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100) NOT NULL, category VARCHAR(50), price DECIMAL(10, 2), rating DECIMAL(3, 2), stock INT DEFAULT 0);"
+  "constraint": "Sort by highest rating and limit to 10 results"
 }
 ```
 
@@ -167,6 +190,16 @@ For more options, run `python -m src.cli --help`.
 
 ## Development
 
+### Setting up the database
+
+The application uses PostgreSQL for database operations. You can set up the database using Docker:
+
+```bash
+docker-compose up -d db
+```
+
+This will start a PostgreSQL container with the necessary schema and sample data.
+
 ### Running tests
 
 ```bash
@@ -185,6 +218,14 @@ isort .
 ```bash
 ruff check .
 ```
+
+### Docker Commands
+
+- Start all services: `docker-compose up -d`
+- Start only the database: `docker-compose up -d db`
+- Start only the API: `docker-compose up -d api`
+- View logs: `docker-compose logs -f`
+- Stop all services: `docker-compose down`
 
 ## License
 

@@ -50,12 +50,11 @@ class GigachatAgent:
             logger.error(error_msg)
             raise GigachatAPIError(error_msg, details={"original_error": str(e)})
 
-    def process_query(self, query: str, **kwargs) -> Dict[str, Any]:
+    def process_query(self, query: str) -> Dict[str, Any]:
         """Process a user query using the Gigachat model.
 
         Args:
             query: The user's query text.
-            **kwargs: Additional parameters to pass to the Gigachat API.
 
         Returns:
             Dictionary containing the model's response and any extracted parameters.

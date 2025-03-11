@@ -22,12 +22,6 @@ class GenerateSQLRequest(BaseModel):
         description="Constraint string to process",
         examples=["Sort by highest rating and limit to 10 results"],
     )
-    table_ddl: str = Field(
-        ...,
-        min_length=1,
-        description="DDL definition of the table to query",
-        examples=["CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100), price DECIMAL(10, 2));"],
-    )
     
     @field_validator('filter')
     @classmethod
@@ -41,15 +35,6 @@ class GenerateSQLRequest(BaseModel):
     def constraint_not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError('Constraint text cannot be empty or whitespace only')
-        return v
-    
-    @field_validator('table_ddl')
-    @classmethod
-    def table_ddl_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError('Table DDL cannot be empty or whitespace only')
-        if not v.lower().startswith('create table'):
-            raise ValueError('Table DDL must start with \'CREATE TABLE\'')
         return v
 
 

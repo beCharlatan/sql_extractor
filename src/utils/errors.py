@@ -117,6 +117,17 @@ class InvalidTableDDLError(ValidationError):
         super().__init__(message, details)
 
 
+class DatabaseError(APIError):
+    """Exception for database-related errors."""
+
+    def __init__(
+        self,
+        message: str = "Database error",
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        super().__init__(message, status.HTTP_500_INTERNAL_SERVER_ERROR, details)
+
+
 def handle_exception(exc: Exception) -> None:
     """Log exception with appropriate level based on type.
 

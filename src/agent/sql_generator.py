@@ -4,6 +4,8 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+from src.db.db_schema_tool import DBSchemaReferenceTool
+
 from loguru import logger
 
 from src.agent.agent import GigachatAgent
@@ -19,27 +21,29 @@ from src.utils.errors import (
 class SQLGenerator:
     """Generates SQL query components based on natural language input."""
 
-    def __init__(self, agent: Optional[GigachatAgent] = None):
+    def __init__(self, agent: Optional[GigachatAgent] = None, db_schema_tool: Optional[DBSchemaReferenceTool] = None, table_name: str = "products"):
         """Initialize the SQL generator.
 
         Args:
             agent: Optional GigachatAgent instance. If not provided, a new one will be created.
+            db_schema_tool: Optional DBSchemaReferenceTool instance. If not provided, a new one will be created.
+            table_name: Name of the table to generate SQL for. Defaults to "products".
         """
         self.agent = agent or GigachatAgent()
-        logger.info("Initialized SQLGenerator")
+        self.db_schema_tool = db_schema_tool or DBSchemaReferenceTool()
+        self.table_name = table_name
+        logger.info(f"Initialized SQLGenerator for table {table_name}")
 
     def generate_sql_components(
         self,
         filter_text: str,
         constraint_text: str,
-        table_ddl: str,
     ) -> Dict[str, Any]:
-        """Generate SQL query components and structured parameters based on filter and constraint text.
+        """Generate SQL query components based on filter and constraint text.
 
         Args:
             filter_text: Human-readable filter description.
             constraint_text: Human-readable constraint description.
-            table_ddl: DDL definition of the table to query.
 
         Returns:
             Dictionary containing:
@@ -48,11 +52,10 @@ class SQLGenerator:
               - order_by_clause: The ORDER BY clause (without the 'ORDER BY' keyword)
               - limit_clause: The LIMIT clause (without the 'LIMIT' keyword)
               - full_sql: The combined SQL components
-            - parameters: Structured parameters extracted from the input
             
         Raises:
             ValidationError: If input validation fails
-            InvalidTableDDLError: If the table DDL is invalid
+            DatabaseError: If the table doesn't exist or there's a database error
             GigachatAPIError: If there's an error with the Gigachat API
             SQLGenerationError: If SQL generation fails
         """
@@ -70,12 +73,6 @@ class SQLGenerator:
                     details={"field": "constraint"}
                 )
                 
-            if not table_ddl or not table_ddl.strip():
-                raise InvalidTableDDLError(
-                    "Table DDL cannot be empty",
-                    details={"field": "table_ddl"}
-                )
-                
             if len(filter_text) > 400:
                 raise ValidationError(
                     "Filter text exceeds maximum length of 400 characters",
@@ -88,17 +85,17 @@ class SQLGenerator:
                     details={"field": "constraint", "value": len(constraint_text)}
                 )
                 
-            # Validate table DDL format
-            if not table_ddl.lower().strip().startswith("create table"):
-                raise InvalidTableDDLError(
-                    "Table DDL must start with 'CREATE TABLE'",
-                    details={"field": "table_ddl", "value": table_ddl[:20] + "..."}
-                )
+            # Get table DDL from database
+            try:
+                table_ddl = self.db_schema_tool.get_table_schema(self.table_name)
+                logger.debug(f"Retrieved table schema for {self.table_name}")
+            except Exception as e:
+                logger.error(f"Error retrieving table schema for {self.table_name}: {str(e)}")
+                raise
             
-            logger.info("Generating SQL components and structured parameters from natural language input")
+            logger.info("Generating SQL components from natural language input")
             logger.debug(f"Filter: {filter_text}")
             logger.debug(f"Constraint: {constraint_text}")
-            logger.debug(f"Table DDL: {table_ddl}")
 
             # Construct a prompt for the model
             prompt = self._build_sql_generation_prompt(filter_text, constraint_text, table_ddl)
@@ -125,7 +122,7 @@ class SQLGenerator:
                     details={"original_error": str(e)}
                 )
 
-            # Extract structured response (SQL components and parameters)
+            # Extract structured response (SQL components)
             try:
                 result = self._extract_structured_response(response_text)
             except Exception as e:
@@ -145,9 +142,8 @@ class SQLGenerator:
                     details={"original_error": str(e), "sql_components": result.get("sql_components", {})}
                 )
 
-            logger.info("Successfully generated SQL components and structured parameters")
+            logger.info("Successfully generated SQL components")
             logger.debug(f"SQL components: {result['sql_components']}")
-            logger.debug(f"Parameters: {result['parameters']}")
             
             return result
             
@@ -173,54 +169,78 @@ class SQLGenerator:
         Returns:
             Formatted prompt for the model.
         """
-        return f"""Generate SQL query components based on the following information:
+        # Get additional column information from database
+        column_info = ""
+        try:
+            columns = self.db_schema_tool.get_table_columns(self.table_name)
+            column_names = [col["name"] for col in columns]
+            column_info = f"\n\n## Информация о столбцах\nТаблица: {self.table_name}\nИмена столбцов: {', '.join(column_names)}"
+            
+            # Add data types for better context
+            column_types = [f"{col['name']} ({col['type']})" for col in columns]
+            column_info += f"\nТипы столбцов: {', '.join(column_types)}"
+            
+            # Try to get parameter descriptions if available
+            parameter_descriptions = []
+            try:
+                for col in columns:
+                    try:
+                        param_info = self.db_schema_tool.get_parameter_info(col["name"])
+                        if param_info and "description" in param_info:
+                            parameter_descriptions.append(f"{col['name']}: {param_info['description']}")
+                    except Exception:
+                        pass
+                if parameter_descriptions:
+                    column_info += f"\n\nОписания параметров:\n{chr(10).join(parameter_descriptions)}"
+            except Exception as e:
+                logger.warning(f"Could not retrieve parameter descriptions: {str(e)}")
+        except Exception as e:
+            logger.warning(f"Could not retrieve column information: {str(e)}")
+            # Fallback to extracting from DDL
+            try:
+                column_names = self._extract_column_names(table_ddl)
+                if column_names:
+                    column_info = f"\n\n## Информация о столбцах\nИмена столбцов: {', '.join(column_names)}"
+            except Exception as e:
+                logger.warning(f"Could not extract column names from DDL: {str(e)}")
+        
+        return f"""Сгенерируй компоненты SQL-запроса на основе следующей информации:
 
-## Table Definition
+## Определение таблицы
 ```sql
 {table_ddl}
 ```
+{column_info}
 
-## Filter
+## Фильтр
 {filter_text}
 
-## Constraint
+## Ограничение
 {constraint_text}
 
-## Instructions
-Based on the table definition and the provided filter and constraint, generate the following SQL query components:
-1. WHERE clause - to filter the data according to the filter description
-2. ORDER BY clause - to sort the data according to the constraint
-3. LIMIT clause - if any limit is specified in the constraint
+## Инструкции
+На основе определения таблицы и предоставленного фильтра и ограничения, сгенерируй следующие компоненты SQL-запроса:
+1. WHERE - для фильтрации данных в соответствии с описанием фильтра
+2. ORDER BY - для сортировки данных в соответствии с ограничением
+3. LIMIT - если в ограничении указан лимит результатов
 
-In addition, extract structured parameters from the filter and constraint text.
-
-Provide your answer in the following JSON format:
+Предоставь свой ответ в следующем JSON-формате:
 
 ```json
 {{
   "sql_components": {{
-    "where_clause": "<where_clause>",
-    "order_by_clause": "<order_by_clause>",
-    "limit_clause": "<limit_clause>"
-  }},
-  "parameters": {{
-    "<parameter_name>": "<parameter_value>",
-    ...
+    "where_clause": "<условие_where>",
+    "order_by_clause": "<условие_order_by>",
+    "limit_clause": "<условие_limit>"
   }}
 }}
 ```
 
-For the SQL components:
-- Do not include the keywords 'WHERE', 'ORDER BY', or 'LIMIT' in your clauses
-- Make sure to use the correct column names from the table definition
-- Use proper SQL syntax with appropriate operators (=, <, >, LIKE, IN, etc.)
-- If a component is not applicable, leave it as an empty string
-
-For the parameters:
-- Extract all relevant parameters mentioned in the filter and constraint
-- Use meaningful parameter names (e.g., category, price_min, sort_by, limit)
-- Convert values to appropriate types where possible (numbers for numeric values, etc.)
-- Include all parameters that would be useful for understanding the query
+Для SQL-компонентов:
+- Не включай ключевые слова 'WHERE', 'ORDER BY' или 'LIMIT' в свои условия
+- Убедись, что используешь правильные имена столбцов из определения таблицы
+- Используй правильный синтаксис SQL с соответствующими операторами (=, <, >, LIKE, IN и т.д.)
+- Если компонент не применим, оставь его как пустую строку
 """
 
     def _extract_structured_response(self, response_text: str) -> Dict[str, Any]:
@@ -230,7 +250,7 @@ For the parameters:
             response_text: The text response from the model.
 
         Returns:
-            Dictionary containing the extracted SQL components and parameters.
+            Dictionary containing the extracted SQL components.
         """
         # Initialize the result structure
         result = {
@@ -239,8 +259,7 @@ For the parameters:
                 "order_by_clause": "",
                 "limit_clause": "",
                 "full_sql": ""
-            },
-            "parameters": {}
+            }
         }
         
         # Try to extract JSON from the response
@@ -254,10 +273,6 @@ For the parameters:
                 # Extract SQL components
                 if "sql_components" in parsed_data:
                     result["sql_components"].update(parsed_data["sql_components"])
-                
-                # Extract parameters
-                if "parameters" in parsed_data:
-                    result["parameters"] = parsed_data["parameters"]
                     
                 logger.info("Successfully extracted structured response from JSON")
                 
@@ -275,9 +290,6 @@ For the parameters:
         logger.info("Falling back to regex extraction")
         sql_components = self._extract_sql_components_regex(response_text)
         result["sql_components"] = sql_components
-        
-        # Try to extract parameters using regex
-        result["parameters"] = self._extract_parameters_regex(response_text)
         
         return result
         
@@ -331,42 +343,6 @@ For the parameters:
             full_sql += f"\nLIMIT {components['limit_clause']}"
 
         components["full_sql"] = full_sql
-        
-    def _extract_parameters_regex(self, response_text: str) -> Dict[str, Any]:
-        """Extract parameters from the model's response using regex.
-
-        Args:
-            response_text: The text response from the model.
-
-        Returns:
-            Dictionary containing the extracted parameters.
-        """
-        parameters = {}
-        
-        # Try to find parameter sections
-        param_section_match = re.search(r'Parameters:\s*(.+?)(?=\n\n|$)', response_text, re.DOTALL)
-        if param_section_match:
-            param_section = param_section_match.group(1)
-            # Extract key-value pairs
-            param_matches = re.finditer(r'(\w+)\s*:\s*(.+?)(?=\n\w+\s*:|$)', param_section, re.DOTALL)
-            for match in param_matches:
-                key = match.group(1).strip()
-                value = match.group(2).strip()
-                parameters[key] = value
-        
-        # Look for key-value pairs in the entire response
-        if not parameters:
-            # Try to extract from JSON-like structures
-            json_like_match = re.search(r'\{\s*"parameters"\s*:\s*\{(.+?)\}\s*\}', response_text, re.DOTALL)
-            if json_like_match:
-                param_content = json_like_match.group(1)
-                param_matches = re.finditer(r'"(\w+)"\s*:\s*"(.+?)"', param_content)
-                for match in param_matches:
-                    key = match.group(1).strip()
-                    value = match.group(2).strip()
-                    parameters[key] = value
-        
-        return parameters
 
     def _validate_sql_components(self, components: Dict[str, str], table_ddl: str) -> Dict[str, str]:
         """Validate the generated SQL components against the table DDL.
