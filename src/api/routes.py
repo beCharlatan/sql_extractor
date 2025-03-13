@@ -73,13 +73,6 @@ def get_sql_generator(agent: GigachatAgent = Depends(get_gigachat_agent)):
                             "order_by_clause": "rating DESC",
                             "limit_clause": "10",
                             "full_sql": "WHERE category = 'electronics' AND price < 1000\nGROUP BY category\nHAVING AVG(price) > 500\nORDER BY rating DESC\nLIMIT 10"
-                        },
-                        "parameters": {
-                            "category": "electronics",
-                            "price_max": 1000,
-                            "sort_by": "rating",
-                            "sort_order": "desc",
-                            "limit": 10
                         }
                     }
                 }
@@ -147,7 +140,7 @@ async def generate_sql(
     sql_generator: SQLGenerator = Depends(get_sql_generator),
 ):
     try:
-        logger.info("Generating SQL components and structured parameters")
+        logger.info("Generating SQL components")
         logger.debug(f"Filter: {request.filter}")
         logger.debug(f"Constraint: {request.constraint}")
         

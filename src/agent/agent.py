@@ -57,7 +57,7 @@ class GigachatAgent:
             query: The user's query text.
 
         Returns:
-            Dictionary containing the model's response and any extracted parameters.
+            Dictionary containing the model's response.
 
         Raises:
             GigachatAPIError: If the API call fails.

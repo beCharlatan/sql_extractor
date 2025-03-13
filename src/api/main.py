@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
 # Create the FastAPI application
 app = FastAPI(
     title="SQL Generator API",
-    description="API for generating SQL from natural language and extracting structured parameters using Gigachat",
+    description="API for generating SQL from natural language using Gigachat",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -36,7 +36,7 @@ app = FastAPI(
     openapi_tags=[
         {
             "name": "client",
-            "description": "Operations for generating SQL and extracting parameters",
+            "description": "Operations for generating SQL",
         },
         {
             "name": "health",
