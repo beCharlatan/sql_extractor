@@ -118,11 +118,11 @@ class TestPostgresIntegration:
         # Check that limit is applied
         assert result["sql_components"]["limit_clause"] == "5"
         
-        # Verify that the agent was called with a prompt containing parameter descriptions
+        # Verify that the agent was called with a prompt
         prompt = mock_agent.process_query.call_args[0][0]
-        assert "Parameter descriptions:" in prompt
-        assert "Product price in USD" in prompt
-        assert "Product rating from 0 to 5" in prompt
+        # Проверяем, что в промпте есть определение таблицы
+        assert "CREATE TABLE" in prompt
+        assert "products" in prompt
     
     def test_category_filter_recognition(self, mock_agent, mock_db_schema_tool):
         """Test that the SQL generator correctly recognizes category filters."""

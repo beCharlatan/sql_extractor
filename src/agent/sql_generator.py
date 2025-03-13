@@ -221,8 +221,10 @@ class SQLGenerator:
 ## Инструкции
 На основе определения таблицы и предоставленного фильтра и ограничения, сгенерируй следующие компоненты SQL-запроса:
 1. WHERE - для фильтрации данных в соответствии с описанием фильтра
-2. ORDER BY - для сортировки данных в соответствии с ограничением
-3. LIMIT - если в ограничении указан лимит результатов
+2. GROUP BY - для группировки данных, если требуется агрегация или вычисление статистических показателей (например, медианы)
+3. HAVING - для фильтрации сгруппированных данных, если требуется
+4. ORDER BY - для сортировки данных в соответствии с ограничением
+5. LIMIT - если в ограничении указан лимит результатов
 
 Предоставь свой ответ в следующем JSON-формате:
 
@@ -230,6 +232,8 @@ class SQLGenerator:
 {{
   "sql_components": {{
     "where_clause": "<условие_where>",
+    "group_by_clause": "<условие_group_by>",
+    "having_clause": "<условие_having>",
     "order_by_clause": "<условие_order_by>",
     "limit_clause": "<условие_limit>"
   }}
@@ -237,10 +241,12 @@ class SQLGenerator:
 ```
 
 Для SQL-компонентов:
-- Не включай ключевые слова 'WHERE', 'ORDER BY' или 'LIMIT' в свои условия
+- Не включай ключевые слова 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY' или 'LIMIT' в свои условия
 - Убедись, что используешь правильные имена столбцов из определения таблицы
 - Используй правильный синтаксис SQL с соответствующими операторами (=, <, >, LIKE, IN и т.д.)
+- Если требуется вычисление медианы, используй соответствующие функции (например, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY column) для PostgreSQL)
 - Если компонент не применим, оставь его как пустую строку
+- Для сложных запросов с медианой, можешь использовать подзапросы или оконные функции
 """
 
     def _extract_structured_response(self, response_text: str) -> Dict[str, Any]:
@@ -256,6 +262,8 @@ class SQLGenerator:
         result = {
             "sql_components": {
                 "where_clause": "",
+                "group_by_clause": "",
+                "having_clause": "",
                 "order_by_clause": "",
                 "limit_clause": "",
                 "full_sql": ""
@@ -304,14 +312,26 @@ class SQLGenerator:
         """
         components = {
             "where_clause": "",
+            "group_by_clause": "",
+            "having_clause": "",
             "order_by_clause": "",
             "limit_clause": "",
         }
 
         # Extract WHERE clause
-        where_match = re.search(r'WHERE:\s*(.+?)(?=\nORDER BY:|\nLIMIT:|$)', response_text, re.DOTALL)
+        where_match = re.search(r'WHERE:\s*(.+?)(?=\nGROUP BY:|\nHAVING:|\nORDER BY:|\nLIMIT:|$)', response_text, re.DOTALL)
         if where_match:
             components["where_clause"] = where_match.group(1).strip()
+
+        # Extract GROUP BY clause
+        group_by_match = re.search(r'GROUP BY:\s*(.+?)(?=\nHAVING:|\nORDER BY:|\nLIMIT:|$)', response_text, re.DOTALL)
+        if group_by_match:
+            components["group_by_clause"] = group_by_match.group(1).strip()
+            
+        # Extract HAVING clause
+        having_match = re.search(r'HAVING:\s*(.+?)(?=\nORDER BY:|\nLIMIT:|$)', response_text, re.DOTALL)
+        if having_match:
+            components["having_clause"] = having_match.group(1).strip()
 
         # Extract ORDER BY clause
         order_by_match = re.search(r'ORDER BY:\s*(.+?)(?=\nLIMIT:|$)', response_text, re.DOTALL)
@@ -337,6 +357,10 @@ class SQLGenerator:
         full_sql = ""
         if components["where_clause"]:
             full_sql += f"WHERE {components['where_clause']}"
+        if components["group_by_clause"]:
+            full_sql += f"\nGROUP BY {components['group_by_clause']}"
+        if components["having_clause"]:
+            full_sql += f"\nHAVING {components['having_clause']}"
         if components["order_by_clause"]:
             full_sql += f"\nORDER BY {components['order_by_clause']}"
         if components["limit_clause"]:
@@ -364,7 +388,7 @@ class SQLGenerator:
             )
             
         # Check required keys exist
-        required_keys = ["where_clause", "order_by_clause", "limit_clause"]
+        required_keys = ["where_clause", "group_by_clause", "having_clause", "order_by_clause", "limit_clause"]
         for key in required_keys:
             if key not in components:
                 components[key] = ""  # Initialize missing keys with empty strings
@@ -386,7 +410,7 @@ class SQLGenerator:
             )
 
         # Check if the generated SQL uses valid column names
-        for component_name in ["where_clause", "order_by_clause"]:
+        for component_name in ["where_clause", "group_by_clause", "having_clause", "order_by_clause"]:
             component = components[component_name]
             if component:
                 # Basic validation - check if the component contains valid column names
@@ -412,7 +436,7 @@ class SQLGenerator:
             r'UNION\s+SELECT',  # UNION-based injection
         ]
         
-        for component_name in ["where_clause", "order_by_clause", "limit_clause"]:
+        for component_name in ["where_clause", "group_by_clause", "having_clause", "order_by_clause", "limit_clause"]:
             component = components[component_name]
             if component:
                 for pattern in sql_injection_patterns:

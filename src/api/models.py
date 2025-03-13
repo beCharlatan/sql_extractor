@@ -1,7 +1,5 @@
 """API data models for request and response validation."""
 
-from typing import Any, Dict
-
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -22,6 +20,12 @@ class GenerateSQLRequest(BaseModel):
         description="Constraint string to process",
         examples=["Sort by highest rating and limit to 10 results"],
     )
+    table_ddl: str = Field(
+        ...,
+        min_length=1,
+        description="SQL DDL statement defining the table structure",
+        examples=["CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100), price DECIMAL(10,2));"],
+    )
     
     @field_validator('filter')
     @classmethod
@@ -36,6 +40,15 @@ class GenerateSQLRequest(BaseModel):
         if not v.strip():
             raise ValueError('Constraint text cannot be empty or whitespace only')
         return v
+    
+    @field_validator('table_ddl')
+    @classmethod
+    def validate_table_ddl(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError('Table DDL cannot be empty or whitespace only')
+        if not v.strip().upper().startswith('CREATE TABLE'):
+            raise ValueError("Table DDL must start with 'CREATE TABLE'")
+        return v
 
 
 class SQLComponents(BaseModel):
@@ -44,6 +57,14 @@ class SQLComponents(BaseModel):
     where_clause: str = Field(
         default="",
         description="WHERE clause (without the 'WHERE' keyword)",
+    )
+    group_by_clause: str = Field(
+        default="",
+        description="GROUP BY clause (without the 'GROUP BY' keyword)",
+    )
+    having_clause: str = Field(
+        default="",
+        description="HAVING clause (without the 'HAVING' keyword)",
     )
     order_by_clause: str = Field(
         default="",

@@ -51,8 +51,14 @@ def get_sql_generator(agent: GigachatAgent = Depends(get_gigachat_agent)):
     description="""
     Generate SQL query components from natural language inputs.
     
-    This endpoint takes a filter text, constraint text, and table DDL as input and returns
-    SQL components (WHERE, ORDER BY, LIMIT clauses) that can be used to construct a complete SQL query.
+    This endpoint takes a filter text and constraint text as input and returns
+    SQL components (WHERE, GROUP BY, HAVING, ORDER BY, LIMIT clauses) that can be used to construct a complete SQL query.
+    
+    The generator now supports advanced SQL features including:
+    - GROUP BY for data aggregation and grouping
+    - HAVING for filtering grouped results
+    - Statistical functions like AVG, COUNT, SUM, MIN, MAX
+    - Percentile calculations (e.g., finding values above the median)
     """,
     responses={
         200: {
@@ -62,9 +68,11 @@ def get_sql_generator(agent: GigachatAgent = Depends(get_gigachat_agent)):
                     "example": {
                         "sql_components": {
                             "where_clause": "category = 'electronics' AND price < 1000",
+                            "group_by_clause": "category",
+                            "having_clause": "AVG(price) > 500",
                             "order_by_clause": "rating DESC",
                             "limit_clause": "10",
-                            "full_sql": "WHERE category = 'electronics' AND price < 1000\nORDER BY rating DESC\nLIMIT 10"
+                            "full_sql": "WHERE category = 'electronics' AND price < 1000\nGROUP BY category\nHAVING AVG(price) > 500\nORDER BY rating DESC\nLIMIT 10"
                         },
                         "parameters": {
                             "category": "electronics",
