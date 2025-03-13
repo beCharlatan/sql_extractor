@@ -33,6 +33,9 @@ logs/
 .coverage
 htmlcov/
 .pytest_cache/
+allure-results/
+allure-report/
+allure-results.zip
 
 # OS specific files
 .DS_Store

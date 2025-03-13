@@ -1,6 +1,7 @@
 """Tests for the SQL generator functionality."""
 
 import pytest
+import allure
 from unittest.mock import MagicMock, patch
 
 from src.agent.sql_generator import SQLGenerator
@@ -42,9 +43,14 @@ CREATE TABLE products (
 """
 
 
+@allure.epic("SQL Generation")
+@allure.feature("SQL Generator")
 class TestSQLGenerator:
     """Test cases for the SQLGenerator class."""
 
+    @allure.story("Basic SQL Generation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Generate SQL components from filter and constraint")
     def test_generate_sql_components(self, mock_agent, sample_ddl):
         """Test generating SQL components from filter and constraint."""
         # Mock the db_schema_tool
@@ -91,6 +97,9 @@ class TestSQLGenerator:
         assert "electronics" in prompt
         assert "1000" in prompt
 
+    @allure.story("DDL Parsing")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Extract column names from table DDL")
     def test_extract_column_names(self, sample_ddl):
         """Test extracting column names from table DDL."""
         # Use a mock agent to avoid API calls
@@ -118,6 +127,9 @@ class TestSQLGenerator:
             assert "PRIMARY" not in column_names
             assert "KEY" not in column_names
 
+    @allure.story("SQL Validation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Validate SQL components against table DDL")
     def test_validate_sql_components(self, sample_ddl):
         """Test validating SQL components against table DDL."""
         # Use a mock agent to avoid API calls
@@ -149,6 +161,9 @@ class TestSQLGenerator:
             assert validated["order_by_clause"] == valid_components["order_by_clause"]
             assert validated["limit_clause"] == valid_components["limit_clause"]
 
+    @allure.story("SQL Validation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Validate invalid SQL components against table DDL")
     def test_validate_invalid_sql_components(self, sample_ddl):
         """Test validating invalid SQL components against table DDL."""
         # Use a mock agent to avoid API calls
@@ -202,6 +217,9 @@ class TestSQLGenerator:
             with pytest.raises(InvalidSQLError):
                 generator._validate_sql_components(invalid_components, sample_ddl)
 
+    @allure.story("DDL Parsing")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Handle invalid table DDL")
     def test_invalid_table_ddl(self, mock_agent):
         """Test handling of invalid table DDL."""
         # Mock the db_schema_tool to return invalid DDL
@@ -239,6 +257,9 @@ LIMIT: 10"""
                 "Sort by rating"
             )
 
+    @allure.story("Prompt Generation")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Build SQL generation prompt")
     def test_build_sql_generation_prompt(self, mock_agent, sample_ddl):
         """Test building the SQL generation prompt."""
         # Mock the db_schema_tool
@@ -269,6 +290,9 @@ LIMIT: 10"""
         assert filter_text in prompt
         assert constraint_text in prompt
 
+    @allure.story("Response Parsing")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Extract structured response from model output")
     def test_extract_structured_response(self, mock_agent):
         """Test extracting structured response from model output."""
         # Mock the db_schema_tool
@@ -296,6 +320,9 @@ LIMIT: 10"""
         assert result["sql_components"]["order_by_clause"] == "rating DESC"
         assert result["sql_components"]["limit_clause"] == "10"
 
+    @allure.story("Basic SQL Generation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Generate full SQL from components")
     def test_generate_full_sql(self, mock_agent):
         """Test generating full SQL from components."""
         # Mock the db_schema_tool
@@ -322,6 +349,9 @@ LIMIT: 10"""
         assert "ORDER BY rating DESC" in components["full_sql"]
         assert "LIMIT 10" in components["full_sql"]
         
+    @allure.story("Advanced SQL Generation")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.title("Generate SQL for median calculation")
     def test_median_query_generation(self, mock_agent, sample_ddl):
         """Test generating SQL for median calculation."""
         # Override the mock response for this specific test
@@ -360,6 +390,9 @@ LIMIT: 5"""
         assert result["sql_components"]["order_by_clause"] == "AVG(price) DESC"
         assert result["sql_components"]["limit_clause"] == "5"
 
+    @allure.story("Initialization")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Initialize SQLGenerator without providing an agent")
     def test_initialization_without_agent(self):
         """Test initializing SQLGenerator without providing an agent."""
         # Mock the GigachatAgent class to avoid actual API calls
@@ -379,6 +412,9 @@ LIMIT: 5"""
             assert mock_agent_class.called
             assert mock_db_tool_class.called
 
+    @allure.story("Response Parsing")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.title("Extract SQL components using regex")
     def test_extract_sql_components_regex(self, mock_agent):
         """Test extracting SQL components using regex."""
         # Mock the db_schema_tool

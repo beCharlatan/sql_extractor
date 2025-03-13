@@ -1,0 +1,34 @@
+endpoint: ${ALLURE_TESTOPS_ENDPOINT}
+token: ${ALLURE_TESTOPS_TOKEN}
+project-id: ${ALLURE_TESTOPS_PROJECT_ID}
+
+results:
+  - path: ./allure-results
+    type: pytest
+
+launch:
+  name: SQL Extractor Tests
+  description: |
+    Автоматические тесты для SQL Extractor
+    Репозиторий: https://github.com/beCharlatan/sql_extractor
+  tags:
+    - CI
+    - Python
+    - SQL Generator
+  attributes:
+    - name: Environment
+      value: Development
+    - name: Framework
+      value: pytest
+    - name: Language
+      value: Python
+    - name: Component
+      value: SQL Generator
+
+upload:
+  # Включить автоматическое создание тест-кейсов в TestOps
+  auto-create-test-cases: true
+  # Включить автоматическое создание лаунчей в TestOps
+  auto-create-launches: true
+  # Включить автоматическое обновление тест-кейсов в TestOps
+  auto-update-test-cases: true

@@ -211,6 +211,49 @@ This will start a PostgreSQL container with the necessary schema and sample data
 python -m pytest
 ```
 
+### Allure Reporting
+
+Проект настроен для генерации отчетов о тестировании с использованием Allure. Для работы с отчетами Allure:
+
+1. Установите Allure CLI (если еще не установлено):
+
+   ```bash
+   # На macOS
+   brew install allure
+   
+   # На Linux
+   curl -o allure-2.24.1.tgz -OLs https://repo.maven.apache.org/maven2/io/qameta/allure/allure-commandline/2.24.1/allure-commandline-2.24.1.tgz
+   tar -zxvf allure-2.24.1.tgz
+   export PATH=$PATH:`pwd`/allure-2.24.1/bin
+   ```
+
+2. Запустите тесты с генерацией отчетов Allure, используя скрипт `run_tests.py`:
+
+   ```bash
+   # Запуск всех тестов с генерацией отчетов Allure
+   python run_tests.py --clean --report
+   
+   # Запуск конкретного теста с генерацией отчетов
+   python run_tests.py --tests tests/test_sql_generator.py --report
+   
+   # Запуск тестов и открытие отчета в браузере
+   python run_tests.py --clean --serve
+   
+   # Подготовка отчета для загрузки в Allure TestOps
+   python run_tests.py --clean --testops
+   ```
+
+3. Для интеграции с Allure TestOps в CI/CD используйте Jenkinsfile и allurectl:
+
+   ```bash
+   # Локальная отправка отчетов в Allure TestOps (требуются переменные окружения)
+   export ALLURE_TESTOPS_ENDPOINT=https://your-testops-instance.com
+   export ALLURE_TESTOPS_TOKEN=your-token
+   export ALLURE_TESTOPS_PROJECT_ID=your-project-id
+   
+   allurectl upload --launch-name "SQL Extractor Tests" allure-results
+   ```
+
 ### Code formatting
 
 ```bash

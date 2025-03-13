@@ -37,14 +37,19 @@ def client():
         agent.process_query.return_value = mock_gigachat_response()
         mock_get_agent.return_value = agent
         
-        with patch("src.api.routes.get_sql_generator") as mock_get_generator:
-            # Setup mock SQL generator
-            generator = MagicMock(spec=SQLGenerator)
-            generator.generate_sql_components.return_value = mock_sql_components()
-            mock_get_generator.return_value = generator
+        # Mock the database schema tool
+        with patch("src.db.db_schema_tool.DBSchemaReferenceTool.get_table_schema") as mock_get_schema:
+            # Setup mock schema response
+            mock_get_schema.return_value = "CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100), price DECIMAL(10, 2), rating DECIMAL(3, 2), category VARCHAR(50));"
             
-            # Return test client
-            yield TestClient(app)
+            with patch("src.api.routes.get_sql_generator") as mock_get_generator:
+                # Setup mock SQL generator
+                generator = MagicMock(spec=SQLGenerator)
+                generator.generate_sql_components.return_value = mock_sql_components()
+                mock_get_generator.return_value = generator
+                
+                # Return test client
+                yield TestClient(app)
 
 
 class TestHealthAPI:
@@ -70,8 +75,7 @@ class TestGenerateSQLAPI:
         # Test request data
         request_data = {
             "filter": "Find products in the electronics category with price less than 1000",
-            "constraint": "Sort by highest rating and limit to 10 results",
-            "table_ddl": "CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100), price DECIMAL(10, 2), rating DECIMAL(3, 2), category VARCHAR(50));"
+            "constraint": "Sort by highest rating and limit to 10 results"
         }
         
         # Send request
@@ -91,8 +95,7 @@ class TestGenerateSQLAPI:
         # Invalid request (empty filter)
         request_data = {
             "filter": "",  # Empty filter should fail validation
-            "constraint": "Sort by highest rating",
-            "table_ddl": "CREATE TABLE products (id INT PRIMARY KEY);"
+            "constraint": "Sort by highest rating"
         }
         
         # Send request
@@ -127,8 +130,7 @@ class TestGenerateSQLAPI:
             # Тестовые данные запроса
             request_data = {
                 "filter": "Find products",
-                "constraint": "Sort by rating",
-                "table_ddl": "CREATE TABLE products (invalid syntax);"
+                "constraint": "Sort by rating"
             }
             
             # Отправляем запрос
@@ -171,8 +173,7 @@ class TestGenerateSQLAPI:
             # Тестовые данные запроса
             request_data = {
                 "filter": "Find products with complex conditions",
-                "constraint": "Sort in a way that's hard to parse",
-                "table_ddl": "CREATE TABLE products (id INT PRIMARY KEY);"
+                "constraint": "Sort in a way that's hard to parse"
             }
             
             # Отправляем запрос
@@ -215,8 +216,7 @@ class TestGenerateSQLAPI:
             # Тестовые данные запроса
             request_data = {
                 "filter": "Find products",
-                "constraint": "Sort by rating",
-                "table_ddl": "CREATE TABLE products (id INT PRIMARY KEY);"
+                "constraint": "Sort by rating"
             }
             
             # Отправляем запрос
@@ -259,8 +259,7 @@ class TestGenerateSQLAPI:
             # Тестовые данные запроса
             request_data = {
                 "filter": "Find products with invalid conditions",
-                "constraint": "Sort by rating",
-                "table_ddl": "CREATE TABLE products (id INT PRIMARY KEY);"
+                "constraint": "Sort by rating"
             }
             
             # Отправляем запрос

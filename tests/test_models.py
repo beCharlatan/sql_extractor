@@ -14,19 +14,16 @@ class TestGenerateSQLRequest:
         request = GenerateSQLRequest(
             filter="Find products in the electronics category",
             constraint="Sort by highest rating and limit to 10 results",
-            table_ddl="CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100));"
         )
         assert request.filter == "Find products in the electronics category"
         assert request.constraint == "Sort by highest rating and limit to 10 results"
-        assert request.table_ddl == "CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(100));"
 
     def test_empty_filter(self):
         """Test that an empty filter raises a validation error."""
         with pytest.raises(ValidationError) as exc_info:
             GenerateSQLRequest(
                 filter="",
-                constraint="Sort by highest rating",
-                table_ddl="CREATE TABLE products (id INT PRIMARY KEY);"
+                constraint="Sort by highest rating"
             )
         errors = exc_info.value.errors()
         assert any(e["type"] == "string_too_short" for e in errors)
@@ -36,8 +33,7 @@ class TestGenerateSQLRequest:
         with pytest.raises(ValidationError) as exc_info:
             GenerateSQLRequest(
                 filter="   ",
-                constraint="Sort by highest rating",
-                table_ddl="CREATE TABLE products (id INT PRIMARY KEY);"
+                constraint="Sort by highest rating"
             )
         errors = exc_info.value.errors()
         assert any("Filter text cannot be empty" in str(e["msg"]) for e in errors)
@@ -47,8 +43,7 @@ class TestGenerateSQLRequest:
         with pytest.raises(ValidationError) as exc_info:
             GenerateSQLRequest(
                 filter="Find products",
-                constraint="",
-                table_ddl="CREATE TABLE products (id INT PRIMARY KEY);"
+                constraint=""
             )
         errors = exc_info.value.errors()
         assert any(e["type"] == "string_too_short" for e in errors)
@@ -58,41 +53,21 @@ class TestGenerateSQLRequest:
         with pytest.raises(ValidationError) as exc_info:
             GenerateSQLRequest(
                 filter="Find products",
-                constraint="   ",
-                table_ddl="CREATE TABLE products (id INT PRIMARY KEY);"
+                constraint="   "
             )
         errors = exc_info.value.errors()
         assert any("Constraint text cannot be empty" in str(e["msg"]) for e in errors)
 
-    def test_empty_table_ddl(self):
-        """Test that an empty table DDL raises a validation error."""
-        with pytest.raises(ValidationError) as exc_info:
-            GenerateSQLRequest(
-                filter="Find products",
-                constraint="Sort by rating",
-                table_ddl=""
-            )
-        errors = exc_info.value.errors()
-        assert any(e["type"] == "string_too_short" for e in errors)
+    # Test for table_ddl removed since the field is no longer part of the model
 
-    def test_invalid_table_ddl(self):
-        """Test that a table DDL not starting with 'CREATE TABLE' raises a validation error."""
-        with pytest.raises(ValidationError) as exc_info:
-            GenerateSQLRequest(
-                filter="Find products",
-                constraint="Sort by rating",
-                table_ddl="INSERT INTO products VALUES (1, 'test');"
-            )
-        errors = exc_info.value.errors()
-        assert any("Table DDL must start with 'CREATE TABLE'" in str(e["msg"]) for e in errors)
+    # Test for invalid table_ddl removed since the field is no longer part of the model
 
     def test_too_long_filter(self):
         """Test that a filter longer than 400 characters raises a validation error."""
         with pytest.raises(ValidationError) as exc_info:
             GenerateSQLRequest(
                 filter="A" * 401,
-                constraint="Sort by rating",
-                table_ddl="CREATE TABLE products (id INT PRIMARY KEY);"
+                constraint="Sort by rating"
             )
         errors = exc_info.value.errors()
         assert any(e["type"] == "string_too_long" for e in errors)
@@ -102,8 +77,7 @@ class TestGenerateSQLRequest:
         with pytest.raises(ValidationError) as exc_info:
             GenerateSQLRequest(
                 filter="Find products",
-                constraint="A" * 401,
-                table_ddl="CREATE TABLE products (id INT PRIMARY KEY);"
+                constraint="A" * 401
             )
         errors = exc_info.value.errors()
         assert any(e["type"] == "string_too_long" for e in errors)
