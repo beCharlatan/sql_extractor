@@ -1,0 +1,96 @@
+test_cases:
+  - id: TC-001
+    title: Проверка доступности и работоспособности сервиса
+    description: Проверка endpoint /health на доступность и корректность ответа
+    prerequisites:
+      - Запущен сервис extract-parameter-agent
+    steps:
+      - Отправить GET запрос на endpoint /health
+    expected_result:
+      - Код ответа: 200
+      - В ответе поле status = ok
+      - В ответе поле service = extract-parameter-agent
+      - В ответе присутствуют поля version и timestamp
+
+  - id: TC-002
+    title: Успешная генерация SQL запроса
+    description: Проверка endpoint /client/generate-sql на успешную генерацию SQL запроса
+    prerequisites:
+      - Запущен сервис extract-parameter-agent
+      - Настроено подключение к Gigachat API
+      - Доступна информация о схеме таблицы
+    steps:
+      - Отправить POST запрос на endpoint /client/generate-sql с корректными данными
+      - В теле запроса указать filter и constraint
+    expected_result:
+      - Код ответа: 200
+      - В ответе присутствует поле sql_components
+      - В sql_components присутствует where_clause, order_by_clause, limit_clause и full_sql
+
+  - id: TC-003
+    title: Обработка ошибки валидации запроса
+    description: Проверка обработки некорректных данных при запросе на endpoint /client/generate-sql
+    prerequisites:
+      - Запущен сервис extract-parameter-agent
+    steps:
+      - Отправить POST запрос на endpoint /client/generate-sql с некорректными данными
+      - В теле запроса указать пустой filter
+    expected_result:
+      - Код ответа: 422 (Unprocessable Entity)
+      - В ответе присутствует поле detail с информацией об ошибке
+
+  - id: TC-004
+    title: Обработка ошибки некорректного формата DDL таблицы
+    description: Проверка обработки ошибки InvalidTableDDLError при запросе на endpoint /client/generate-sql
+    prerequisites:
+      - Запущен сервис extract-parameter-agent
+      - Некорректный формат DDL таблицы
+    steps:
+      - Отправить POST запрос на endpoint /client/generate-sql
+      - В ответ получить ошибку InvalidTableDDLError
+    expected_result:
+      - Код ответа: 400 (Bad Request)
+      - В ответе присутствует поле detail с информацией об ошибке
+      - В detail присутствуют поля error и details
+
+  - id: TC-005
+    title: Обработка ошибки генерации SQL
+    description: Проверка обработки ошибки SQLGenerationError при запросе на endpoint /client/generate-sql
+    prerequisites:
+      - Запущен сервис extract-parameter-agent
+      - Ошибка при генерации SQL запроса
+    steps:
+      - Отправить POST запрос на endpoint /client/generate-sql со сложными условиями
+      - В ответ получить ошибку SQLGenerationError
+    expected_result:
+      - Код ответа: 500 (Internal Server Error)
+      - В ответе присутствует поле detail с информацией об ошибке
+      - В detail присутствуют поля error и details
+
+  - id: TC-006
+    title: Обработка ошибки API Gigachat
+    description: Проверка обработки ошибки GigachatAPIError при запросе на endpoint /client/generate-sql
+    prerequisites:
+      - Запущен сервис extract-parameter-agent
+      - Недоступен API Gigachat
+    steps:
+      - Отправить POST запрос на endpoint /client/generate-sql
+      - В ответ получить ошибку GigachatAPIError
+    expected_result:
+      - Код ответа: 502 (Bad Gateway)
+      - В ответе присутствует поле detail с информацией об ошибке
+      - В detail присутствуют поля error и details
+
+  - id: TC-007
+    title: Обработка ошибки некорректного SQL запроса
+    description: Проверка обработки ошибки InvalidSQLError при запросе на endpoint /client/generate-sql
+    prerequisites:
+      - Запущен сервис extract-parameter-agent
+      - Сгенерирован некорректный SQL запрос
+    steps:
+      - Отправить POST запрос на endpoint /client/generate-sql с условиями, приводящими к ошибке
+      - В ответ получить ошибку InvalidSQLError
+    expected_result:
+      - Код ответа: 400 (Bad Request)
+      - В ответе присутствует поле detail с информацией об ошибке
+      - В detail присутствуют поля error и details

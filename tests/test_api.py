@@ -1,6 +1,7 @@
 """Tests for the API endpoints."""
 
 import pytest
+import allure
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, patch
 
@@ -55,6 +56,11 @@ def client():
 class TestHealthAPI:
     """Test cases for the health check endpoint."""
 
+    @allure.feature("Проверка доступности")
+    @allure.story("Проверка работоспособности сервиса")
+    @allure.title("Проверка доступности и работоспособности сервиса")
+    @allure.severity(allure.severity_level.BLOCKER)
+    @allure.id("TC-001")
     def test_health_check(self):
         """Test the health check endpoint."""
         client = TestClient(app)  # No need for mocks for health check
@@ -70,6 +76,11 @@ class TestHealthAPI:
 class TestGenerateSQLAPI:
     """Test cases for the generate-sql endpoint."""
     
+    @allure.feature("Генерация SQL")
+    @allure.story("Успешная генерация SQL")
+    @allure.title("Успешная генерация SQL запроса")
+    @allure.severity(allure.severity_level.CRITICAL)
+    @allure.id("TC-002")
     def test_generate_sql_success(self, client):
         """Test successful SQL generation."""
         # Test request data
@@ -90,6 +101,11 @@ class TestGenerateSQLAPI:
         assert "limit_clause" in data["sql_components"]
         assert "full_sql" in data["sql_components"]
 
+    @allure.feature("Генерация SQL")
+    @allure.story("Обработка ошибок")
+    @allure.title("Обработка ошибки валидации запроса")
+    @allure.severity(allure.severity_level.NORMAL)
+    @allure.id("TC-003")
     def test_validation_error(self, client):
         """Test validation error for invalid request data."""
         # Invalid request (empty filter)
@@ -106,6 +122,11 @@ class TestGenerateSQLAPI:
         data = response.json()
         assert "detail" in data
     
+    @allure.feature("Генерация SQL")
+    @allure.story("Обработка ошибок")
+    @allure.title("Обработка ошибки некорректного формата DDL таблицы")
+    @allure.severity(allure.severity_level.HIGH)
+    @allure.id("TC-004")
     def test_invalid_table_ddl_error(self, client):
         """Test error handling for invalid table DDL."""
         # Создаем мок, который будет вызывать ошибку
@@ -149,6 +170,11 @@ class TestGenerateSQLAPI:
             else:
                 app.dependency_overrides[get_sql_generator] = original_dependency
 
+    @allure.feature("Генерация SQL")
+    @allure.story("Обработка ошибок")
+    @allure.title("Обработка ошибки генерации SQL")
+    @allure.severity(allure.severity_level.HIGH)
+    @allure.id("TC-005")
     def test_sql_generation_error(self, client):
         """Test error handling for SQL generation errors."""
         # Создаем мок, который будет вызывать ошибку
@@ -192,6 +218,11 @@ class TestGenerateSQLAPI:
             else:
                 app.dependency_overrides[get_sql_generator] = original_dependency
 
+    @allure.feature("Генерация SQL")
+    @allure.story("Обработка ошибок")
+    @allure.title("Обработка ошибки API Gigachat")
+    @allure.severity(allure.severity_level.HIGH)
+    @allure.id("TC-006")
     def test_gigachat_api_error(self, client):
         """Test error handling for Gigachat API errors."""
         # Создаем мок, который будет вызывать ошибку
@@ -235,6 +266,11 @@ class TestGenerateSQLAPI:
             else:
                 app.dependency_overrides[get_sql_generator] = original_dependency
 
+    @allure.feature("Генерация SQL")
+    @allure.story("Обработка ошибок")
+    @allure.title("Обработка ошибки некорректного SQL запроса")
+    @allure.severity(allure.severity_level.HIGH)
+    @allure.id("TC-007")
     def test_invalid_sql_error(self, client):
         """Test error handling for invalid SQL errors."""
         # Создаем мок, который будет вызывать ошибку
