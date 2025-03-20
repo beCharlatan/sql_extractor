@@ -65,8 +65,8 @@ def main():
     # Если нужно подготовить отчет для TestOps, добавляем соответствующие опции
     if args.testops:
         pytest_cmd.extend([
-            "--allure-features=SQL Generator,API,Database Integration",
-            "--allure-epics=SQL Generation,API Integration,Database",
+            "--allure-features=SQL Generator,API,Database Integration,Kafka Integration",
+            "--allure-epics=SQL Generation,API Integration,Database,Asynchronous Processing",
             "--allure-link-pattern=issue:https://github.com/beCharlatan/sql_extractor/issues/{}",
             "--allure-link-pattern=tms:https://testops.example.com/testcase/{}"
         ])

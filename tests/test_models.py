@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.api.models import GenerateSQLRequest, SQLComponents, GenerateSQLResponse
+from src.models import GenerateSQLRequest, SQLComponents
 
 
 class TestGenerateSQLRequest:
@@ -36,7 +36,7 @@ class TestGenerateSQLRequest:
                 constraint="Sort by highest rating"
             )
         errors = exc_info.value.errors()
-        assert any("Filter text cannot be empty" in str(e["msg"]) for e in errors)
+        assert any("Текст фильтра не может быть пустым или содержать только пробелы" in str(e["msg"]) for e in errors)
 
     def test_empty_constraint(self):
         """Test that an empty constraint raises a validation error."""
@@ -56,7 +56,7 @@ class TestGenerateSQLRequest:
                 constraint="   "
             )
         errors = exc_info.value.errors()
-        assert any("Constraint text cannot be empty" in str(e["msg"]) for e in errors)
+        assert any("Текст ограничений не может быть пустым или содержать только пробелы" in str(e["msg"]) for e in errors)
 
     # Test for table_ddl removed since the field is no longer part of the model
 
@@ -106,22 +106,3 @@ class TestSQLComponents:
         assert components.order_by_clause == "price DESC"
         assert components.limit_clause == "10"
         assert components.full_sql == "WHERE category = 'electronics'\nORDER BY price DESC\nLIMIT 10"
-
-
-class TestGenerateSQLResponse:
-    """Test cases for the GenerateSQLResponse model."""
-
-    def test_response_with_components(self):
-        """Test that a response with SQL components is created correctly."""
-        components = SQLComponents(
-            where_clause="category = 'electronics'",
-            order_by_clause="price DESC",
-            limit_clause="10",
-            full_sql="WHERE category = 'electronics'\nORDER BY price DESC\nLIMIT 10"
-        )
-        response = GenerateSQLResponse(sql_components=components)
-        assert response.sql_components == components
-        assert response.sql_components.where_clause == "category = 'electronics'"
-        assert response.sql_components.order_by_clause == "price DESC"
-        assert response.sql_components.limit_clause == "10"
-        assert response.sql_components.full_sql == "WHERE category = 'electronics'\nORDER BY price DESC\nLIMIT 10"

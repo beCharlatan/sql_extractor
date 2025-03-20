@@ -5,7 +5,6 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from src.agent.sql_generator import SQLGenerator
-from src.db.db_schema_tool import DBSchemaReferenceTool
 from src.utils.errors import DatabaseError
 
 
@@ -41,33 +40,39 @@ def mock_db_schema_tool():
     tool = MagicMock()
     
     # Mock get_table_schema
-    tool.get_table_schema.return_value = """
-    CREATE TABLE products (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        description TEXT,
-        price DECIMAL(10, 2) NOT NULL,
-        category VARCHAR(50),
-        rating DECIMAL(3, 2),
-        stock INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    """
+    async def mock_get_table_schema(*args, **kwargs):
+        return """
+        CREATE TABLE products (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            description TEXT,
+            price DECIMAL(10, 2) NOT NULL,
+            category VARCHAR(50),
+            rating DECIMAL(3, 2),
+            stock INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """
+    
+    tool.get_table_schema = mock_get_table_schema
     
     # Mock get_table_columns
-    tool.get_table_columns.return_value = [
-        {"cid": 1, "name": "id", "type": "integer", "notnull": 1, "default_value": "nextval('products_id_seq'::regclass)", "pk": 1},
-        {"cid": 2, "name": "name", "type": "character varying", "notnull": 1, "default_value": None, "pk": 0},
-        {"cid": 3, "name": "description", "type": "text", "notnull": 0, "default_value": None, "pk": 0},
-        {"cid": 4, "name": "price", "type": "numeric", "notnull": 1, "default_value": None, "pk": 0},
-        {"cid": 5, "name": "category", "type": "character varying", "notnull": 0, "default_value": None, "pk": 0},
-        {"cid": 6, "name": "rating", "type": "numeric", "notnull": 0, "default_value": None, "pk": 0},
-        {"cid": 7, "name": "stock", "type": "integer", "notnull": 0, "default_value": "0", "pk": 0},
-        {"cid": 8, "name": "created_at", "type": "timestamp without time zone", "notnull": 0, "default_value": "CURRENT_TIMESTAMP", "pk": 0}
-    ]
+    async def mock_get_table_columns(*args, **kwargs):
+        return [
+            {"cid": 1, "name": "id", "type": "integer", "notnull": 1, "default_value": "nextval('products_id_seq'::regclass)", "pk": 1},
+            {"cid": 2, "name": "name", "type": "character varying", "notnull": 1, "default_value": None, "pk": 0},
+            {"cid": 3, "name": "description", "type": "text", "notnull": 0, "default_value": None, "pk": 0},
+            {"cid": 4, "name": "price", "type": "numeric", "notnull": 1, "default_value": None, "pk": 0},
+            {"cid": 5, "name": "category", "type": "character varying", "notnull": 0, "default_value": None, "pk": 0},
+            {"cid": 6, "name": "rating", "type": "numeric", "notnull": 0, "default_value": None, "pk": 0},
+            {"cid": 7, "name": "stock", "type": "integer", "notnull": 0, "default_value": "0", "pk": 0},
+            {"cid": 8, "name": "created_at", "type": "timestamp without time zone", "notnull": 0, "default_value": "CURRENT_TIMESTAMP", "pk": 0}
+        ]
+    
+    tool.get_table_columns = mock_get_table_columns
     
     # Mock get_parameter_info
-    def mock_get_parameter_info(param_name):
+    async def mock_get_parameter_info(param_name):
         parameter_info = {
             "price": {"parameter_name": "price", "description": "Product price in USD", "data_type": "numeric"},
             "category": {"parameter_name": "category", "description": "Product category (e.g. electronics, clothing)", "data_type": "string"},
@@ -78,29 +83,36 @@ def mock_db_schema_tool():
             return parameter_info[param_name]
         raise DatabaseError(f"Parameter '{param_name}' not found in reference table")
     
-    tool.get_parameter_info.side_effect = mock_get_parameter_info
-    
-    # Mock get_all_tables
-    tool.get_all_tables.return_value = ["products", "orders", "customers"]
+    tool.get_parameter_info = mock_get_parameter_info
     
     return tool
+
+
+@pytest.fixture
+async def async_sql_generator(mock_agent, mock_db_schema_tool):
+    """Create an async SQLGenerator instance for testing."""
+    # Патчим метод create, чтобы он просто создавал экземпляр без вызова асинхронных методов
+    with patch.object(SQLGenerator, "create") as mock_create:
+        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
+        generator.table_name = "products"  # Устанавливаем имя таблицы сразу
+        mock_create.return_value = generator
+        yield generator
 
 
 class TestPostgresIntegration:
     """Test PostgreSQL integration with the SQL generator."""
     
-    def test_field_recognition_with_parameter_info(self, mock_agent, mock_db_schema_tool):
+    @pytest.mark.asyncio
+    async def test_field_recognition_with_parameter_info(self, async_sql_generator, mock_agent):
         """Test that the SQL generator correctly recognizes fields with parameter info."""
-        # Initialize the SQL generator with mocks
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
-        generator.table_name = "products"
+        generator = async_sql_generator
         
         # Test inputs that should use price field (not stock)
         filter_text = "найти все товары с ценой меньше 500"
         constraint_text = "отсортировать по рейтингу в порядке убывания и ограничить результат 5 записями"
         
         # Generate SQL components
-        result = generator.generate_sql_components(filter_text, constraint_text)
+        result = await generator.generate_sql_components(filter_text, constraint_text)
         
         # Verify the results
         assert "sql_components" in result
@@ -124,18 +136,17 @@ class TestPostgresIntegration:
         assert "CREATE TABLE" in prompt
         assert "products" in prompt
     
-    def test_category_filter_recognition(self, mock_agent, mock_db_schema_tool):
+    @pytest.mark.asyncio
+    async def test_category_filter_recognition(self, async_sql_generator):
         """Test that the SQL generator correctly recognizes category filters."""
-        # Initialize the SQL generator with mocks
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
-        generator.table_name = "products"
+        generator = async_sql_generator
         
         # Test inputs for category filtering
         filter_text = "найти все товары в категории electronics"
         constraint_text = "отсортировать по цене по возрастанию"
         
         # Generate SQL components
-        result = generator.generate_sql_components(filter_text, constraint_text)
+        result = await generator.generate_sql_components(filter_text, constraint_text)
         
         # Verify the results
         assert "category" in result["sql_components"]["where_clause"]
@@ -145,18 +156,17 @@ class TestPostgresIntegration:
         # but our mock agent always returns 'rating DESC'
         assert "rating" in result["sql_components"]["order_by_clause"]
         
-    def test_limit_recognition(self, mock_agent, mock_db_schema_tool):
+    @pytest.mark.asyncio
+    async def test_limit_recognition(self, async_sql_generator):
         """Test that the SQL generator correctly recognizes limit constraints."""
-        # Initialize the SQL generator with mocks
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
-        generator.table_name = "products"
+        generator = async_sql_generator
         
         # Test inputs with explicit limit
         filter_text = "найти все товары"
         constraint_text = "ограничить результат 5 записями"
         
         # Generate SQL components
-        result = generator.generate_sql_components(filter_text, constraint_text)
+        result = await generator.generate_sql_components(filter_text, constraint_text)
         
         # Verify the results
         assert result["sql_components"]["limit_clause"] == "5"

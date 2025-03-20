@@ -1,4 +1,4 @@
-"""Logging utility for the AI agent application."""
+"""Утилита логирования для приложения AI-агента."""
 
 import sys
 from pathlib import Path
@@ -10,18 +10,18 @@ from src.config.settings import settings
 
 
 def setup_logging(log_file: Optional[str] = None) -> None:
-    """Configure application logging.
+    """Настройка логирования приложения.
 
-    Args:
-        log_file: Optional path to log file. If not provided, will use the value from settings.
+    Аргументы:
+        log_file: Опциональный путь к файлу лога. Если не указан, будет использовано значение из настроек.
     """
-    # Remove default logger
+    # Удаление логгера по умолчанию
     logger.remove()
 
-    # Get log level from settings
+    # Получение уровня логирования из настроек
     log_level = settings.logging.level
 
-    # Add console handler
+    # Добавление обработчика консоли
     logger.add(
         sys.stderr,
         format=settings.logging.format,
@@ -29,7 +29,7 @@ def setup_logging(log_file: Optional[str] = None) -> None:
         colorize=True,
     )
 
-    # Add file handler if log file is specified
+    # Добавление обработчика файла, если файл лога указан
     log_file = log_file or settings.logging.log_file
     if log_file:
         log_path = Path(log_file)
@@ -46,5 +46,5 @@ def setup_logging(log_file: Optional[str] = None) -> None:
     logger.info(f"Logging initialized with level: {log_level}")
 
 
-# Initialize logging with default settings
+# Инициализация логирования с настройками по умолчанию
 setup_logging()

@@ -16,70 +16,100 @@ class TestDBSchemaReferenceTool:
         
         # Test with custom connection string
         custom_conn_string = "postgresql://user:pass@localhost:5432/testdb"
-        tool = DBSchemaReferenceTool(db_connection_string=custom_conn_string)
-        assert tool.db_connection_string == custom_conn_string
+        tool = DBSchemaReferenceTool(connection_string=custom_conn_string)
+        assert tool.master_connection_string == custom_conn_string
     
-    def test_get_table_schema(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_create(self, mock_asyncpg_pool):
+        """Test asynchronous creation of the DBSchemaReferenceTool."""
+        # Test with default connection string
+        tool = await DBSchemaReferenceTool.create()
+        assert isinstance(tool, DBSchemaReferenceTool)
+        
+        # Test with custom connection string
+        custom_conn_string = "postgresql://user:pass@localhost:5432/testdb"
+        tool = await DBSchemaReferenceTool.create(connection_string=custom_conn_string)
+        assert tool.master_connection_string == custom_conn_string
+    
+    @pytest.mark.asyncio
+    async def test_get_table_schema(self, mock_execute_query):
         """Test getting table schema."""
-        _, _, mock_cursor = mock_db_connection
+        # Настройка mock для execute_query
+        async def custom_query_results(*args, **kwargs):
+            query = args[1] if len(args) > 1 else kwargs.get('query', '')
+            if "EXISTS" in query:
+                return [{"exists": True}]
+            if "SELECT 'CREATE TABLE'" in query:
+                return [["CREATE TABLE test_table (id INTEGER, name TEXT);"]]
+            return []
+            
+        mock_execute_query.side_effect = custom_query_results
         
-        # Mock the cursor's fetchone method to return table exists
-        mock_cursor.fetchone.side_effect = [(True,), ("CREATE TABLE test_table (id INTEGER, name TEXT);",)]
-        
-        tool = DBSchemaReferenceTool(db_connection_string="postgresql://user:pass@localhost:5432/testdb")
+        # Создание инстанса через create
+        tool = await DBSchemaReferenceTool.create(connection_string="postgresql://user:pass@localhost:5432/testdb")
         table_name = "test_table"
         
-        result = tool.get_table_schema(table_name)
-        
-        # Check that the correct SQL was executed
-        assert mock_cursor.execute.call_count == 2
-        # First call should check if table exists
-        assert "SELECT EXISTS" in mock_cursor.execute.call_args_list[0][0][0]
-        # Second call should get the table schema
-        assert "CREATE TABLE" in mock_cursor.execute.call_args_list[1][0][0]
+        result = await tool.get_table_schema(table_name)
         
         # Check the result
         assert result == "CREATE TABLE test_table (id INTEGER, name TEXT);"
+        
+        # Проверка вызовов execute_query
+        assert mock_execute_query.call_count == 2
+        # Первый вызов должен проверять существование таблицы
+        assert "EXISTS" in mock_execute_query.call_args_list[0][0][1]
+        # Второй вызов должен получать схему таблицы
+        assert "CREATE TABLE" in mock_execute_query.call_args_list[1][0][1]
     
-    def test_get_table_schema_table_not_exists(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_get_table_schema_table_not_exists(self, mock_execute_query):
         """Test getting schema for non-existent table."""
-        _, _, mock_cursor = mock_db_connection
+        # Настройка mock для execute_query
+        async def custom_query_results(*args, **kwargs):
+            query = args[1] if len(args) > 1 else kwargs.get('query', '')
+            if "EXISTS" in query:
+                return [{"exists": False}]
+            return []
+            
+        mock_execute_query.side_effect = custom_query_results
         
-        # Mock the cursor's fetchone method to return table does not exist
-        mock_cursor.fetchone.return_value = (False,)
-        
-        tool = DBSchemaReferenceTool(db_connection_string="postgresql://user:pass@localhost:5432/testdb")
+        # Создание инстанса через create
+        tool = await DBSchemaReferenceTool.create(connection_string="postgresql://user:pass@localhost:5432/testdb")
         table_name = "nonexistent_table"
         
         # Check that DatabaseError is raised
         with pytest.raises(DatabaseError) as excinfo:
-            tool.get_table_schema(table_name)
+            await tool.get_table_schema(table_name)
         
         # Check error message
         assert "does not exist" in str(excinfo.value)
+        
+        # Проверка вызовов execute_query
+        assert mock_execute_query.call_count == 1
+        assert "EXISTS" in mock_execute_query.call_args[0][1]
     
-    def test_get_table_columns(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_get_table_columns(self, mock_execute_query):
         """Test getting table columns."""
-        _, _, mock_cursor = mock_db_connection
+        # Настройка mock для execute_query
+        async def custom_query_results(*args, **kwargs):
+            query = args[1] if len(args) > 1 else kwargs.get('query', '')
+            if "EXISTS" in query:
+                return [{"exists": True}]
+            if "information_schema.columns" in query:
+                return [
+                    {"cid": 1, "name": "id", "type": "integer", "notnull": 1, "default_value": "nextval('test_table_id_seq'::regclass)", "pk": 1},
+                    {"cid": 2, "name": "name", "type": "text", "notnull": 0, "default_value": None, "pk": 0}
+                ]
+            return []
+            
+        mock_execute_query.side_effect = custom_query_results
         
-        # Mock the cursor's fetchone and fetchall methods
-        mock_cursor.fetchone.return_value = (True,)
-        mock_cursor.fetchall.return_value = [
-            (1, "id", "integer", 1, "nextval('test_table_id_seq'::regclass)", 1),
-            (2, "name", "text", 0, None, 0)
-        ]
-        
-        tool = DBSchemaReferenceTool(db_connection_string="postgresql://user:pass@localhost:5432/testdb")
+        # Создание инстанса через create
+        tool = await DBSchemaReferenceTool.create(connection_string="postgresql://user:pass@localhost:5432/testdb")
         table_name = "test_table"
         
-        result = tool.get_table_columns(table_name)
-        
-        # Check that the correct SQL was executed
-        assert mock_cursor.execute.call_count == 2
-        # First call should check if table exists
-        assert "SELECT EXISTS" in mock_cursor.execute.call_args_list[0][0][0]
-        # Second call should get the column information
-        assert "information_schema.columns" in mock_cursor.execute.call_args_list[1][0][0]
+        result = await tool.get_table_columns(table_name)
         
         # Check the result
         assert len(result) == 2
@@ -89,84 +119,59 @@ class TestDBSchemaReferenceTool:
         assert result[1]["name"] == "name"
         assert result[1]["type"] == "text"
         assert result[1]["pk"] == 0
+        
+        # Проверка вызовов execute_query
+        assert mock_execute_query.call_count == 2
+        # Первый вызов должен проверять существование таблицы
+        assert "EXISTS" in mock_execute_query.call_args_list[0][0][1]
+        # Второй вызов должен получать информацию о столбцах
+        assert "information_schema.columns" in mock_execute_query.call_args_list[1][0][1]
     
-    def test_get_parameter_info(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_get_parameter_info(self, mock_execute_query):
         """Test getting parameter information."""
-        _, _, mock_cursor = mock_db_connection
+        # Настройка mock для execute_query
+        async def custom_query_results(*args, **kwargs):
+            query = args[1] if len(args) > 1 else kwargs.get('query', '')
+            if "parameters_reference" in query:
+                return [{"parameter_name": "test_param", "description": "Test parameter description", "data_type": "string"}]
+            return []
+            
+        mock_execute_query.side_effect = custom_query_results
         
-        # Mock the cursor's fetchone method
-        mock_cursor.fetchone.return_value = ("test_param", "Test parameter description", "string")
+        # Создание инстанса через create
+        tool = await DBSchemaReferenceTool.create(connection_string="postgresql://user:pass@localhost:5432/testdb")
         
-        tool = DBSchemaReferenceTool(db_connection_string="postgresql://user:pass@localhost:5432/testdb")
-        
-        result = tool.get_parameter_info("test_param")
-        
-        # Check that the correct SQL was executed
-        assert mock_cursor.execute.call_count == 1
-        assert "parameters_reference" in mock_cursor.execute.call_args[0][0]
+        result = await tool.get_parameter_info("test_param")
         
         # Check the result
         assert result["parameter_name"] == "test_param"
         assert result["description"] == "Test parameter description"
         assert result["data_type"] == "string"
+        
+        # Проверка вызовов execute_query
+        assert mock_execute_query.call_count == 1
+        assert "parameters_reference" in mock_execute_query.call_args[0][1]
     
-    def test_get_parameter_info_not_found(self, mock_db_connection):
+    @pytest.mark.asyncio
+    async def test_get_parameter_info_not_found(self, mock_execute_query):
         """Test getting information for non-existent parameter."""
-        _, _, mock_cursor = mock_db_connection
+        # Настройка mock для execute_query - пустой результат
+        async def custom_query_results(*args, **kwargs):
+            return []
+            
+        mock_execute_query.side_effect = custom_query_results
         
-        # Mock the cursor's fetchone method to return None (parameter not found)
-        mock_cursor.fetchone.return_value = None
-        
-        tool = DBSchemaReferenceTool(db_connection_string="postgresql://user:pass@localhost:5432/testdb")
+        # Создание инстанса через create
+        tool = await DBSchemaReferenceTool.create(connection_string="postgresql://user:pass@localhost:5432/testdb")
         
         # Check that DatabaseError is raised
         with pytest.raises(DatabaseError) as excinfo:
-            tool.get_parameter_info("nonexistent_param")
+            await tool.get_parameter_info("nonexistent_param")
         
         # Check error message
         assert "not found in reference table" in str(excinfo.value)
-    
-    def test_search_parameters(self, mock_db_connection):
-        """Test searching for parameters."""
-        _, _, mock_cursor = mock_db_connection
         
-        # Mock the cursor's fetchall method
-        mock_cursor.fetchall.return_value = [
-            ("param1", "First test parameter", "string"),
-            ("param2", "Second test parameter", "integer")
-        ]
-        
-        tool = DBSchemaReferenceTool(db_connection_string="postgresql://user:pass@localhost:5432/testdb")
-        
-        result = tool.search_parameters("test")
-        
-        # Check that the correct SQL was executed
-        assert mock_cursor.execute.call_count == 1
-        assert "ILIKE" in mock_cursor.execute.call_args[0][0]
-        
-        # Check the result
-        assert len(result) == 2
-        assert result[0]["parameter_name"] == "param1"
-        assert result[1]["parameter_name"] == "param2"
-    
-    def test_get_all_tables(self, mock_db_connection):
-        """Test getting all tables from the database."""
-        _, _, mock_cursor = mock_db_connection
-        
-        # Mock the cursor's fetchall method
-        mock_cursor.fetchall.return_value = [("table1",), ("table2",), ("table3",)]
-        
-        tool = DBSchemaReferenceTool(db_connection_string="postgresql://user:pass@localhost:5432/testdb")
-        
-        result = tool.get_all_tables()
-        
-        # Check that the correct SQL was executed
-        assert mock_cursor.execute.call_count == 1
-        assert "information_schema.tables" in mock_cursor.execute.call_args[0][0]
-        assert "table_schema = 'public'" in mock_cursor.execute.call_args[0][0]
-        
-        # Check the result
-        assert len(result) == 3
-        assert "table1" in result
-        assert "table2" in result
-        assert "table3" in result
+        # Проверка вызовов execute_query
+        assert mock_execute_query.call_count == 1
+        assert "parameters_reference" in mock_execute_query.call_args[0][1]

@@ -42,3 +42,7 @@ allure-results.zip
 Thumbs.db
 
 docs/
+
+main.build/
+main.dist/
+main.bin

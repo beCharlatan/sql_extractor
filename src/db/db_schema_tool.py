@@ -1,122 +1,124 @@
-"""Database schema reference tool for the AI agent."""
+"""Инструмент для работы со схемой базы данных для ИИ-агента."""
 
-import psycopg2
-from psycopg2 import sql
 from typing import Dict, List, Optional, Any
 from loguru import logger
 
-from src.config.settings import settings
+from src.db.base_db_client import BaseDBClient
 from src.utils.errors import DatabaseError
 
 
-class DBSchemaReferenceTool:
-    """Tool for retrieving database schema information.
+class DBSchemaReferenceTool(BaseDBClient):
+    """Инструмент для получения информации о схеме базы данных.
     
-    This tool connects to a database and retrieves table structure information,
-    which can be used by the agent to understand data structure for filtering,
-    sorting, and other operations.
+    Этот инструмент подключается к базе данных и получает информацию о структуре таблиц,
+    которая может быть использована агентом для понимания структуры данных для фильтрации,
+    сортировки и других операций.
     """
 
-    def __init__(self, db_connection_string: Optional[str] = None):
-        """Initialize the DB schema reference tool.
+    def __init__(self, connection_string: Optional[str] = None, db_key: str = 'schema'):
+        """Инициализация инструмента для работы со схемой базы данных.
 
-        Args:
-            db_connection_string: Optional connection string to the PostgreSQL database. 
-                                  Defaults to the one specified in settings.
+        Аргументы:
+            connection_string: Опциональная строка подключения к базе данных. 
+                              По умолчанию используется строка, указанная в настройках.
+            db_key: Уникальный идентификатор для этого подключения к базе данных.
+                  По умолчанию 'schema'.
         """
-        self.db_connection_string = db_connection_string or settings.database.get_connection_string()
-        logger.info(f"Initialized DBSchemaReferenceTool with database connection")
+        super().__init__(connection_string, db_key=db_key)
 
-    def get_table_schema(self, table_name: str) -> str:
-        """Get the DDL (CREATE TABLE statement) for a specific table.
+    @classmethod
+    async def create(cls, connection_string: Optional[str] = None, db_key: str = 'schema') -> 'DBSchemaReferenceTool':
+        """Асинхронная инициализация инструмента для работы со схемой базы данных.
 
-        Args:
-            table_name: Name of the table to get schema for.
+        Аргументы:
+            connection_string: Опциональная строка подключения к базе данных.
+                              По умолчанию используется строка, указанная в настройках.
+            db_key: Уникальный идентификатор для этого подключения к базе данных.
+                  По умолчанию 'schema'.
+        """
+        instance = await super().create(connection_string=connection_string, db_key=db_key)
+        return instance
 
-        Returns:
-            DDL statement for the table.
+    async def get_table_schema(self, table_name: str) -> str:
+        """Получение DDL (оператора CREATE TABLE) для конкретной таблицы.
 
-        Raises:
-            DatabaseError: If there's an error connecting to the database or the table doesn't exist.
+        Аргументы:
+            table_name: Имя таблицы, для которой нужно получить схему.
+
+        Возвращает:
+            DDL-оператор для таблицы.
+
+        Вызывает исключение:
+            DatabaseError: Если есть ошибка подключения к базе данных или таблица не существует.
         """
         try:
-            conn = psycopg2.connect(self.db_connection_string)
-            cursor = conn.cursor()
+            # Проверка существования таблицы
+            exists_query = """
+                SELECT EXISTS (SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = $1)
+            """
+            exists_result = await self.execute_query(exists_query, [table_name])
             
-            # Check if table exists
-            cursor.execute(
-                """SELECT EXISTS (SELECT 1 FROM information_schema.tables 
-                   WHERE table_schema = 'public' AND table_name = %s)""", 
-                (table_name,)
-            )
-            if not cursor.fetchone()[0]:
+            if not exists_result[0]['exists']:
                 raise DatabaseError(f"Table '{table_name}' does not exist", details={"table_name": table_name})
             
-            # Get the CREATE TABLE statement using pg_dump-like query
-            cursor.execute(
-                """SELECT 'CREATE TABLE ' || relname || ' (' ||
-                   array_to_string(array_agg(column_name || ' ' || data_type), ', ') || ');'
-                   FROM (
-                       SELECT c.relname, a.attname AS column_name,
-                       pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type
-                       FROM pg_catalog.pg_class c
-                       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-                       JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
-                       WHERE c.relname = %s
-                       AND a.attnum > 0
-                       AND NOT a.attisdropped
-                       AND n.nspname = 'public'
-                       ORDER BY a.attnum
-                   ) t
-                   GROUP BY relname;""", 
-                (table_name,)
-            )
-            result = cursor.fetchone()
+            # Получение оператора CREATE TABLE с помощью запроса, похожего на pg_dump
+            ddl_query = """
+                SELECT 'CREATE TABLE ' || relname || ' (' ||
+                array_to_string(array_agg(column_name || ' ' || data_type), ', ') || ');'
+                FROM (
+                    SELECT c.relname, a.attname AS column_name,
+                    pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type
+                    FROM pg_catalog.pg_class c
+                    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+                    JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+                    WHERE c.relname = $1
+                    AND a.attnum > 0
+                    AND NOT a.attisdropped
+                    AND n.nspname = 'public'
+                    ORDER BY a.attnum
+                ) t
+                GROUP BY relname;
+            """
+            result = await self.execute_query(ddl_query, [table_name])
             
-            conn.close()
-            
-            if not result or not result[0]:
+            if not result or not result[0][0]:
                 raise DatabaseError(f"Failed to retrieve DDL for table '{table_name}'", 
                                   details={"table_name": table_name})
                 
-            return result[0]
-        except psycopg2.Error as e:
-            error_msg = f"Database error when retrieving schema for table '{table_name}': {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"table_name": table_name, "original_error": str(e)})
+            return result[0][0]
+            
         except Exception as e:
-            error_msg = f"Unexpected error when retrieving schema for table '{table_name}': {str(e)}"
+            error_msg = f"Error when retrieving schema for table '{table_name}': {str(e)}"
             logger.error(error_msg)
             raise DatabaseError(error_msg, details={"table_name": table_name, "original_error": str(e)})
 
-    def get_table_columns(self, table_name: str) -> List[Dict[str, str]]:
-        """Get detailed information about columns in a table.
+    async def get_table_columns(self, table_name: str) -> List[Dict[str, str]]:
+        """Получение подробной информации о столбцах в таблице.
 
-        Args:
-            table_name: Name of the table to get columns for.
+        Аргументы:
+            table_name: Имя таблицы, для которой нужно получить столбцы.
 
-        Returns:
-            List of dictionaries containing column information (name, type, etc.).
+        Возвращает:
+            Список словарей, содержащих информацию о столбцах (имя, тип и т.д.).
 
-        Raises:
-            DatabaseError: If there's an error connecting to the database or the table doesn't exist.
+        Вызывает исключение:
+            DatabaseError: Если есть ошибка подключения к базе данных или таблица не существует.
         """
         try:
-            conn = psycopg2.connect(self.db_connection_string)
-            cursor = conn.cursor()
+            # Проверка существования таблицы
+            exists_query = """
+                SELECT EXISTS (SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = $1)
+            """
+            exists_result = await self.execute_query(exists_query, [table_name])
             
-            # Check if table exists
-            cursor.execute(
-                """SELECT EXISTS (SELECT 1 FROM information_schema.tables 
-                   WHERE table_schema = 'public' AND table_name = %s)""", 
-                (table_name,)
-            )
-            if not cursor.fetchone()[0]:
+            if not exists_result[0]['exists']:
                 raise DatabaseError(f"Table '{table_name}' does not exist", details={"table_name": table_name})
             
-            # Get column information
-            cursor.execute(
-                """SELECT 
+            # Получение информации о столбцах
+            columns_query = """
+                SELECT 
                     ordinal_position as cid,
                     column_name as name,
                     data_type as type,
@@ -126,163 +128,69 @@ class DBSchemaReferenceTool:
                         SELECT column_name FROM information_schema.table_constraints tc
                         JOIN information_schema.constraint_column_usage ccu 
                         USING (constraint_schema, constraint_name)
-                        WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_name = %s
+                        WHERE tc.constraint_type = 'PRIMARY KEY' AND tc.table_name = $1
                     ) THEN 1 ELSE 0 END as pk
                 FROM information_schema.columns
-                WHERE table_schema = 'public' AND table_name = %s
-                ORDER BY ordinal_position""", 
-                (table_name, table_name)
-            )
-            columns_info = cursor.fetchall()
-            
-            conn.close()
+                WHERE table_schema = 'public' AND table_name = $1
+                ORDER BY ordinal_position
+            """
+            columns_info = await self.execute_query(columns_query, [table_name])
             
             if not columns_info:
                 raise DatabaseError(f"Failed to retrieve columns for table '{table_name}'", 
                                   details={"table_name": table_name})
                 
-            # Format the column information
+            # Форматирование информации о столбцах
             columns = []
             for col in columns_info:
                 columns.append({
-                    "cid": col[0],
-                    "name": col[1],
-                    "type": col[2],
-                    "notnull": col[3],
-                    "default_value": col[4],
-                    "pk": col[5]
+                    "cid": col['cid'],
+                    "name": col['name'],
+                    "type": col['type'],
+                    "notnull": col['notnull'],
+                    "default_value": col['default_value'],
+                    "pk": col['pk']
                 })
                 
             return columns
-        except psycopg2.Error as e:
-            error_msg = f"Database error when retrieving columns for table '{self.table_name}': {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"table_name": self.table_name, "original_error": str(e)})
+            
         except Exception as e:
-            error_msg = f"Unexpected error when retrieving columns for table '{self.table_name}': {str(e)}"
+            error_msg = f"Error when retrieving columns for table '{table_name}': {str(e)}"
             logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"table_name": self.table_name, "original_error": str(e)})
+            raise DatabaseError(error_msg, details={"table_name": table_name, "original_error": str(e)})
 
-    def get_parameter_info(self, parameter_name: str) -> Dict[str, Any]:
-        """Get information about a specific parameter from the parameters reference table.
+    async def get_parameter_info(self, parameter_name: str) -> Dict[str, Any]:
+        """Получение информации о конкретном параметре из справочной таблицы параметров.
 
-        Args:
-            parameter_name: Name of the parameter to look up.
+        Аргументы:
+            parameter_name: Имя параметра для поиска.
 
-        Returns:
-            Dictionary containing parameter information (name, description, data_type).
+        Возвращает:
+            Словарь, содержащий информацию о параметре (имя, описание, тип данных).
 
-        Raises:
-            DatabaseError: If there's an error connecting to the database or the parameter doesn't exist.
+        Вызывает исключение:
+            DatabaseError: Если есть ошибка подключения к базе данных или параметр не существует.
         """
         try:
-            conn = psycopg2.connect(self.db_connection_string)
-            cursor = conn.cursor()
-            
-            # Assuming there's a parameters_reference table with columns: parameter_name, description, data_type
-            cursor.execute(
-                "SELECT parameter_name, description, data_type FROM parameters_reference WHERE parameter_name = %s", 
-                (parameter_name,)
-            )
-            result = cursor.fetchone()
-            
-            conn.close()
+            # Предполагается, что существует таблица parameters_reference со столбцами: parameter_name, description, data_type
+            query = """
+                SELECT parameter_name, description, data_type 
+                FROM parameters_reference 
+                WHERE parameter_name = $1
+            """
+            result = await self.execute_query(query, [parameter_name])
             
             if not result:
                 raise DatabaseError(f"Parameter '{parameter_name}' not found in reference table", 
                                   details={"parameter_name": parameter_name})
                 
             return {
-                "parameter_name": result[0],
-                "description": result[1],
-                "data_type": result[2]
+                "parameter_name": result[0]['parameter_name'],
+                "description": result[0]['description'],
+                "data_type": result[0]['data_type']
             }
-        except psycopg2.Error as e:
-            error_msg = f"Database error when retrieving parameter info for '{parameter_name}': {str(e)}"
+            
+        except Exception as e:
+            error_msg = f"Error when retrieving parameter info for '{parameter_name}': {str(e)}"
             logger.error(error_msg)
             raise DatabaseError(error_msg, details={"parameter_name": parameter_name, "original_error": str(e)})
-        except Exception as e:
-            error_msg = f"Unexpected error when retrieving parameter info for '{parameter_name}': {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"parameter_name": parameter_name, "original_error": str(e)})
-
-    def search_parameters(self, search_term: str) -> List[Dict[str, Any]]:
-        """Search for parameters matching a search term.
-
-        Args:
-            search_term: Term to search for in parameter names or descriptions.
-
-        Returns:
-            List of dictionaries containing parameter information.
-
-        Raises:
-            DatabaseError: If there's an error connecting to the database.
-        """
-        try:
-            conn = psycopg2.connect(self.db_connection_string)
-            cursor = conn.cursor()
-            
-            # Search in both parameter_name and description
-            cursor.execute(
-                """
-                SELECT parameter_name, description, data_type 
-                FROM parameters_reference 
-                WHERE parameter_name ILIKE %s OR description ILIKE %s
-                """, 
-                (f"%{search_term}%", f"%{search_term}%")
-            )
-            results = cursor.fetchall()
-            
-            conn.close()
-            
-            parameters = []
-            for result in results:
-                parameters.append({
-                    "parameter_name": result[0],
-                    "description": result[1],
-                    "data_type": result[2]
-                })
-                
-            return parameters
-        except psycopg2.Error as e:
-            error_msg = f"Database error when searching parameters with term '{search_term}': {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"search_term": search_term, "original_error": str(e)})
-        except Exception as e:
-            error_msg = f"Unexpected error when searching parameters with term '{search_term}': {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"search_term": search_term, "original_error": str(e)})
-
-    def get_all_tables(self) -> List[str]:
-        """Get a list of all tables in the database.
-
-        Returns:
-            List of table names.
-
-        Raises:
-            DatabaseError: If there's an error connecting to the database.
-        """
-        try:
-            conn = psycopg2.connect(self.db_connection_string)
-            cursor = conn.cursor()
-            
-            cursor.execute(
-                """
-                SELECT table_name 
-                FROM information_schema.tables 
-                WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
-                """
-            )
-            tables = cursor.fetchall()
-            
-            conn.close()
-            
-            return [table[0] for table in tables]
-        except psycopg2.Error as e:
-            error_msg = f"Database error when retrieving all tables: {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"original_error": str(e)})
-        except Exception as e:
-            error_msg = f"Unexpected error when retrieving all tables: {str(e)}"
-            logger.error(error_msg)
-            raise DatabaseError(error_msg, details={"original_error": str(e)})

@@ -1,4 +1,4 @@
-"""SQL query generation functionality for the AI agent."""
+"""Функциональность генерации SQL-запросов для ИИ-агента."""
 
 import json
 import re
@@ -19,48 +19,80 @@ from src.utils.errors import (
 
 
 class SQLGenerator:
-    """Generates SQL query components based on natural language input."""
+    """Генерирует компоненты SQL-запроса на основе ввода на естественном языке."""
 
-    def __init__(self, agent: Optional[GigachatAgent] = None, db_schema_tool: Optional[DBSchemaReferenceTool] = None, table_name: str = "products"):
-        """Initialize the SQL generator.
+    def __init__(
+        self, 
+        agent: Optional[GigachatAgent] = None, 
+        db_schema_tool: Optional[DBSchemaReferenceTool] = None, 
+        table_name: str = "products"
+    ):
+        """Инициализация генератора SQL.
 
-        Args:
-            agent: Optional GigachatAgent instance. If not provided, a new one will be created.
-            db_schema_tool: Optional DBSchemaReferenceTool instance. If not provided, a new one will be created.
-            table_name: Name of the table to generate SQL for. Defaults to "products".
+        Аргументы:
+            agent: Опциональный экземпляр GigachatAgent. Если не предоставлен, будет создан новый.
+            db_schema_tool: Опциональный экземпляр DBSchemaReferenceTool. Если не предоставлен, будет создан новый.
+            table_name: Имя таблицы, для которой генерируется SQL.
         """
         self.agent = agent or GigachatAgent()
-        self.db_schema_tool = db_schema_tool or DBSchemaReferenceTool()
+        self.db_schema_tool = db_schema_tool
         self.table_name = table_name
         logger.info(f"Initialized SQLGenerator for table {table_name}")
 
-    def generate_sql_components(
+    @classmethod
+    async def create(
+        cls, 
+        agent: Optional[GigachatAgent] = None, 
+        db_schema_tool: Optional[DBSchemaReferenceTool] = None, 
+        table_name: str = "products"
+    ) -> 'SQLGenerator':
+        """Асинхронная инициализация генератора SQL.
+
+        Аргументы:
+            agent: Опциональный экземпляр GigachatAgent. Если не предоставлен, будет создан новый.
+            db_schema_tool: Опциональный экземпляр DBSchemaReferenceTool. Если не предоставлен, будет создан новый.
+            table_name: Имя таблицы, для которой генерируется SQL.
+            
+        Возвращает:
+            Экземпляр SQLGenerator с инициализированными зависимостями.
+        """
+        instance = cls(agent=agent, db_schema_tool=None, table_name=table_name)
+        
+        # Создание инстанса DBSchemaReferenceTool, если не был передан
+        if db_schema_tool is None:
+            instance.db_schema_tool = await DBSchemaReferenceTool.create()
+        else:
+            instance.db_schema_tool = db_schema_tool
+            
+        return instance
+
+    async def generate_sql_components(
         self,
         filter_text: str,
         constraint_text: str,
     ) -> Dict[str, Any]:
-        """Generate SQL query components based on filter and constraint text.
+        """Генерация компонентов SQL-запроса на основе текста фильтра и ограничения.
 
-        Args:
-            filter_text: Human-readable filter description.
-            constraint_text: Human-readable constraint description.
+        Аргументы:
+            filter_text: Описание фильтра на естественном языке.
+            constraint_text: Описание ограничения на естественном языке.
 
-        Returns:
-            Dictionary containing:
-            - sql_components: The generated SQL components
-              - where_clause: The WHERE clause (without the 'WHERE' keyword)
-              - order_by_clause: The ORDER BY clause (without the 'ORDER BY' keyword)
-              - limit_clause: The LIMIT clause (without the 'LIMIT' keyword)
-              - full_sql: The combined SQL components
+        Возвращает:
+            Словарь, содержащий:
+            - sql_components: Сгенерированные компоненты SQL
+              - where_clause: Условие WHERE (без ключевого слова 'WHERE')
+              - order_by_clause: Условие ORDER BY (без ключевого слова 'ORDER BY')
+              - limit_clause: Условие LIMIT (без ключевого слова 'LIMIT')
+              - full_sql: Объединенные компоненты SQL
             
-        Raises:
-            ValidationError: If input validation fails
-            DatabaseError: If the table doesn't exist or there's a database error
-            GigachatAPIError: If there's an error with the Gigachat API
-            SQLGenerationError: If SQL generation fails
+        Вызывает исключения:
+            ValidationError: Если проверка входных данных не пройдена
+            DatabaseError: Если таблица не существует или есть ошибка базы данных
+            GigachatAPIError: Если есть ошибка с API Gigachat
+            SQLGenerationError: Если генерация SQL не удалась
         """
         try:
-            # Validate inputs
+            # Проверка входных данных
             if not filter_text or not filter_text.strip():
                 raise ValidationError(
                     "Filter text cannot be empty",
@@ -85,9 +117,9 @@ class SQLGenerator:
                     details={"field": "constraint", "value": len(constraint_text)}
                 )
                 
-            # Get table DDL from database
+            # Получение DDL таблицы из базы данных
             try:
-                table_ddl = self.db_schema_tool.get_table_schema(self.table_name)
+                table_ddl = await self.db_schema_tool.get_table_schema(self.table_name)
                 logger.debug(f"Retrieved table schema for {self.table_name}")
             except Exception as e:
                 logger.error(f"Error retrieving table schema for {self.table_name}: {str(e)}")
@@ -97,11 +129,11 @@ class SQLGenerator:
             logger.debug(f"Filter: {filter_text}")
             logger.debug(f"Constraint: {constraint_text}")
 
-            # Construct a prompt for the model
-            prompt = self._build_sql_generation_prompt(filter_text, constraint_text, table_ddl)
+            # Создание промпта для модели
+            prompt = await self._build_sql_generation_prompt(filter_text, constraint_text, table_ddl)
 
             try:
-                # Process the query with the agent
+                # Обработка запроса с помощью агента
                 response = self.agent.process_query(prompt)
                 
                 # Извлекаем текст ответа в зависимости от структуры ответа API
@@ -122,7 +154,7 @@ class SQLGenerator:
                     details={"original_error": str(e)}
                 )
 
-            # Extract structured response (SQL components)
+            # Извлечение структурированного ответа (компоненты SQL)
             try:
                 result = self._extract_structured_response(response_text)
             except Exception as e:
@@ -132,7 +164,7 @@ class SQLGenerator:
                     details={"original_error": str(e), "response_text": response_text[:100] + "..."}
                 )
             
-            # Validate the generated SQL components
+            # Проверка сгенерированных SQL-компонентов
             try:
                 result["sql_components"] = self._validate_sql_components(result["sql_components"], table_ddl)
             except Exception as e:
@@ -148,44 +180,44 @@ class SQLGenerator:
             return result
             
         except (ValidationError, InvalidTableDDLError, GigachatAPIError, SQLGenerationError, InvalidSQLError):
-            # Re-raise known exceptions for proper handling upstream
+            # Повторно вызываем известные исключения для правильной обработки выше
             raise
         except Exception as e:
-            # Catch any other unexpected exceptions
+            # Перехват любых других неожиданных исключений
             logger.exception(f"Unexpected error in SQL generation: {str(e)}")
             raise SQLGenerationError(
                 f"Unexpected error in SQL generation: {str(e)}",
                 details={"original_error": str(e)}
             )
 
-    def _build_sql_generation_prompt(self, filter_text: str, constraint_text: str, table_ddl: str) -> str:
-        """Build a prompt for SQL generation.
+    async def _build_sql_generation_prompt(self, filter_text: str, constraint_text: str, table_ddl: str) -> str:
+        """Создание промпта для генерации SQL.
 
-        Args:
-            filter_text: Human-readable filter description.
-            constraint_text: Human-readable constraint description.
-            table_ddl: DDL definition of the table to query.
+        Аргументы:
+            filter_text: Описание фильтра на естественном языке.
+            constraint_text: Описание ограничения на естественном языке.
+            table_ddl: DDL-определение таблицы для запроса.
 
-        Returns:
-            Formatted prompt for the model.
+        Возвращает:
+            Отформатированный промпт для модели.
         """
-        # Get additional column information from database
+        # Получение дополнительной информации о столбцах из базы данных
         column_info = ""
         try:
-            columns = self.db_schema_tool.get_table_columns(self.table_name)
+            columns = await self.db_schema_tool.get_table_columns(self.table_name)
             column_names = [col["name"] for col in columns]
             column_info = f"\n\n## Информация о столбцах\nТаблица: {self.table_name}\nИмена столбцов: {', '.join(column_names)}"
             
-            # Add data types for better context
+            # Добавление типов данных для лучшего контекста
             column_types = [f"{col['name']} ({col['type']})" for col in columns]
             column_info += f"\nТипы столбцов: {', '.join(column_types)}"
             
-            # Try to get parameter descriptions if available
+            # Попытка получить описания параметров, если они доступны
             parameter_descriptions = []
             try:
                 for col in columns:
                     try:
-                        param_info = self.db_schema_tool.get_parameter_info(col["name"])
+                        param_info = await self.db_schema_tool.get_parameter_info(col["name"])
                         if param_info and "description" in param_info:
                             parameter_descriptions.append(f"{col['name']}: {param_info['description']}")
                     except Exception:
@@ -196,7 +228,7 @@ class SQLGenerator:
                 logger.warning(f"Could not retrieve parameter descriptions: {str(e)}")
         except Exception as e:
             logger.warning(f"Could not retrieve column information: {str(e)}")
-            # Fallback to extracting from DDL
+            # Запасной вариант - извлечение из DDL
             try:
                 column_names = self._extract_column_names(table_ddl)
                 if column_names:
@@ -250,15 +282,15 @@ class SQLGenerator:
 """
 
     def _extract_structured_response(self, response_text: str) -> Dict[str, Any]:
-        """Extract structured response from the model's output.
+        """Извлечение структурированного ответа из вывода модели.
 
-        Args:
-            response_text: The text response from the model.
+        Аргументы:
+            response_text: Текстовый ответ от модели.
 
-        Returns:
-            Dictionary containing the extracted SQL components.
+        Возвращает:
+            Словарь, содержащий извлеченные компоненты SQL.
         """
-        # Initialize the result structure
+        # Инициализация структуры результата
         result = {
             "sql_components": {
                 "where_clause": "",
@@ -270,21 +302,21 @@ class SQLGenerator:
             }
         }
         
-        # Try to extract JSON from the response
+        # Попытка извлечь JSON из ответа
         try:
-            # Find JSON content between triple backticks
+            # Поиск JSON-содержимого между тройными обратными кавычками
             json_match = re.search(r'```json\s*(.+?)\s*```', response_text, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)
                 parsed_data = json.loads(json_str)
                 
-                # Extract SQL components
+                # Извлечение компонентов SQL
                 if "sql_components" in parsed_data:
                     result["sql_components"].update(parsed_data["sql_components"])
                     
                 logger.info("Successfully extracted structured response from JSON")
                 
-                # Generate full SQL if not present
+                # Генерация полного SQL, если он отсутствует
                 if "full_sql" not in result["sql_components"] or not result["sql_components"]["full_sql"]:
                     self._generate_full_sql(result["sql_components"])
                     
@@ -294,7 +326,7 @@ class SQLGenerator:
         except Exception as e:
             logger.warning(f"Error extracting structured response: {e}")
         
-        # Fallback to regex extraction if JSON parsing fails
+        # Запасной вариант - извлечение с помощью регулярных выражений, если разбор JSON не удался
         logger.info("Falling back to regex extraction")
         sql_components = self._extract_sql_components_regex(response_text)
         result["sql_components"] = sql_components
@@ -302,13 +334,13 @@ class SQLGenerator:
         return result
         
     def _extract_sql_components_regex(self, response_text: str) -> Dict[str, str]:
-        """Extract SQL components from the model's response using regex.
+        """Извлечение компонентов SQL из ответа модели с использованием регулярных выражений.
 
-        Args:
-            response_text: The text response from the model.
+        Аргументы:
+            response_text: Текстовый ответ от модели.
 
-        Returns:
-            Dictionary containing the extracted SQL components.
+        Возвращает:
+            Словарь, содержащий извлеченные компоненты SQL.
         """
         components = {
             "where_clause": "",
@@ -318,27 +350,27 @@ class SQLGenerator:
             "limit_clause": "",
         }
 
-        # Extract WHERE clause
+        # Извлечение условия WHERE
         where_match = re.search(r'WHERE:\s*(.+?)(?=\nGROUP BY:|\nHAVING:|\nORDER BY:|\nLIMIT:|$)', response_text, re.DOTALL)
         if where_match:
             components["where_clause"] = where_match.group(1).strip()
 
-        # Extract GROUP BY clause
+        # Извлечение условия GROUP BY
         group_by_match = re.search(r'GROUP BY:\s*(.+?)(?=\nHAVING:|\nORDER BY:|\nLIMIT:|$)', response_text, re.DOTALL)
         if group_by_match:
             components["group_by_clause"] = group_by_match.group(1).strip()
             
-        # Extract HAVING clause
+        # Извлечение условия HAVING
         having_match = re.search(r'HAVING:\s*(.+?)(?=\nORDER BY:|\nLIMIT:|$)', response_text, re.DOTALL)
         if having_match:
             components["having_clause"] = having_match.group(1).strip()
 
-        # Extract ORDER BY clause
+        # Извлечение условия ORDER BY
         order_by_match = re.search(r'ORDER BY:\s*(.+?)(?=\nLIMIT:|$)', response_text, re.DOTALL)
         if order_by_match:
             components["order_by_clause"] = order_by_match.group(1).strip()
 
-        # Extract LIMIT clause
+        # Извлечение условия LIMIT
         limit_match = re.search(r'LIMIT:\s*(.+?)(?=\n|$)', response_text, re.DOTALL)
         if limit_match:
             components["limit_clause"] = limit_match.group(1).strip()
@@ -349,10 +381,10 @@ class SQLGenerator:
         return components
         
     def _generate_full_sql(self, components: Dict[str, str]) -> None:
-        """Generate full SQL from components and add it to the components dict.
+        """Генерация полного SQL из компонентов и добавление его в словарь компонентов.
 
-        Args:
-            components: Dictionary of SQL components to update with full_sql.
+        Аргументы:
+            components: Словарь компонентов SQL для обновления с full_sql.
         """
         full_sql = ""
         if components["where_clause"]:
@@ -369,17 +401,17 @@ class SQLGenerator:
         components["full_sql"] = full_sql
 
     def _validate_sql_components(self, components: Dict[str, str], table_ddl: str) -> Dict[str, str]:
-        """Validate the generated SQL components against the table DDL.
+        """Проверка сгенерированных компонентов SQL на соответствие DDL таблицы.
 
-        Args:
-            components: The extracted SQL components.
-            table_ddl: The table DDL to validate against.
+        Аргументы:
+            components: Извлеченные компоненты SQL.
+            table_ddl: DDL таблицы для проверки.
 
-        Returns:
-            Validated SQL components.
+        Возвращает:
+            Проверенные компоненты SQL.
             
-        Raises:
-            InvalidSQLError: If the SQL components are invalid and cannot be fixed.
+        Вызывает исключение:
+            InvalidSQLError: Если компоненты SQL недействительны и не могут быть исправлены.
         """
         if not components:
             raise InvalidSQLError(
@@ -387,14 +419,14 @@ class SQLGenerator:
                 details={"components": components}
             )
             
-        # Check required keys exist
+        # Проверка наличия необходимых ключей
         required_keys = ["where_clause", "group_by_clause", "having_clause", "order_by_clause", "limit_clause"]
         for key in required_keys:
             if key not in components:
                 components[key] = ""  # Initialize missing keys with empty strings
                 logger.warning(f"Missing SQL component: {key}. Initialized with empty string.")
         
-        # Extract column names from the table DDL
+        # Извлечение имен столбцов из DDL таблицы
         try:
             column_names = self._extract_column_names(table_ddl)
             if not column_names:
@@ -409,11 +441,11 @@ class SQLGenerator:
                 details={"table_ddl": table_ddl[:100] + "...", "error": str(e)}
             )
 
-        # Check if the generated SQL uses valid column names
+        # Проверка, использует ли сгенерированный SQL допустимые имена столбцов
         for component_name in ["where_clause", "group_by_clause", "having_clause", "order_by_clause"]:
             component = components[component_name]
             if component:
-                # Basic validation - check if the component contains valid column names
+                # Базовая проверка - проверка, содержит ли компонент допустимые имена столбцов
                 valid = False
                 for column in column_names:
                     if column.lower() in component.lower():
@@ -422,10 +454,10 @@ class SQLGenerator:
 
                 if not valid:
                     logger.warning(f"Generated {component_name} does not contain any valid column names")
-                    # We're not fixing it automatically, but we're warning about it
-                    # This could be a false positive if the component uses aliases or functions
+                    # Мы не исправляем это автоматически, но предупреждаем об этом
+                    # Это может быть ложным срабатыванием, если компонент использует псевдонимы или функции
         
-        # Check for SQL injection patterns
+        # Проверка на наличие шаблонов SQL-инъекций
         sql_injection_patterns = [
             r'--',  # SQL comment
             r';\s*DROP',  # Attempt to drop tables
@@ -446,40 +478,40 @@ class SQLGenerator:
                             details={"component": component, "pattern": pattern}
                         )
 
-        # Validate LIMIT clause is a number or empty
+        # Проверка, что условие LIMIT является числом или пустым
         limit = components["limit_clause"]
         if limit:
             if not re.match(r'^\d+$', limit):
                 logger.warning(f"Invalid LIMIT clause: {limit}. Setting to empty.")
                 components["limit_clause"] = ""
-                # Update the full SQL accordingly if it exists
+                # Обновление полного SQL соответственно, если он существует
                 if "full_sql" in components:
                     components["full_sql"] = components["full_sql"].replace(f"\nLIMIT {limit}", "")
         
-        # Generate full SQL if it doesn't exist or needs to be updated
+        # Генерация полного SQL, если он не существует или требует обновления
         self._generate_full_sql(components)
 
         return components
 
     def _extract_column_names(self, table_ddl: str) -> List[str]:
-        """Extract column names from the table DDL.
+        """Извлечение имен столбцов из DDL таблицы.
 
-        Args:
-            table_ddl: The table DDL to extract column names from.
+        Аргументы:
+            table_ddl: DDL таблицы, из которого извлекаются имена столбцов.
 
-        Returns:
-            List of column names.
+        Возвращает:
+            Список имен столбцов.
         """
         column_names = []
         
-        # Use regex to extract column definitions
-        # This is a simplified approach and might need to be adjusted for complex DDLs
+        # Использование регулярных выражений для извлечения определений столбцов
+        # Это упрощенный подход, который может потребовать корректировки для сложных DDL
         column_pattern = r'\s*([\w_]+)\s+([\w\(\)]+)'  # Matches "column_name data_type"
         matches = re.finditer(column_pattern, table_ddl)
         
         for match in matches:
             column_name = match.group(1)
-            # Skip if the match is a SQL keyword
+            # Пропуск, если совпадение является ключевым словом SQL
             if column_name.upper() not in ["CREATE", "TABLE", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "NOT", "NULL", "DEFAULT", "AUTO_INCREMENT"]:
                 column_names.append(column_name)
         

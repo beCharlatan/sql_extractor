@@ -43,29 +43,50 @@ CREATE TABLE products (
 """
 
 
+@pytest.fixture
+def mock_db_schema_tool(sample_ddl):
+    """Create a mock db_schema_tool for testing."""
+    mock_db_tool = MagicMock()
+    mock_db_tool.get_table_schema.return_value = sample_ddl
+    mock_db_tool.get_table_columns.return_value = [
+        {"name": "id", "type": "INT"},
+        {"name": "name", "type": "VARCHAR"},
+        {"name": "category", "type": "VARCHAR"},
+        {"name": "price", "type": "DECIMAL"},
+        {"name": "rating", "type": "DECIMAL"},
+        {"name": "stock", "type": "INT"}
+    ]
+    return mock_db_tool
+
+
 @allure.epic("SQL Generation")
 @allure.feature("SQL Generator")
 class TestSQLGenerator:
     """Test cases for the SQLGenerator class."""
 
+    @pytest.fixture
+    async def async_sql_generator(self, mock_agent, mock_db_schema_tool):
+        """Create an async SQLGenerator instance for testing."""
+        # Патчим метод create, чтобы он просто создавал экземпляр без вызова асинхронных методов
+        with patch.object(SQLGenerator, "create") as mock_create:
+            generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
+            mock_create.return_value = generator
+            yield generator
+
     @allure.story("Basic SQL Generation")
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Generate SQL components from filter and constraint")
-    def test_generate_sql_components(self, mock_agent, sample_ddl):
+    @pytest.mark.asyncio
+    async def test_generate_sql_components(self, async_sql_generator, mock_agent, mock_db_schema_tool, sample_ddl):
         """Test generating SQL components from filter and constraint."""
-        # Mock the db_schema_tool
-        mock_db_tool = MagicMock()
-        mock_db_tool.get_table_schema.return_value = sample_ddl
-        
-        # Initialize the SQL generator with the mock agent and db_tool
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_tool)
+        generator = async_sql_generator
 
         # Test inputs
         filter_text = "Find products in the electronics category"
         constraint_text = "Price should be less than 1000, sort by highest rating, and limit to 10 results"
 
         # Generate SQL components
-        result = generator.generate_sql_components(filter_text, constraint_text)
+        result = await generator.generate_sql_components(filter_text, constraint_text)
 
         # Verify the results
         assert "sql_components" in result
@@ -220,14 +241,10 @@ class TestSQLGenerator:
     @allure.story("DDL Parsing")
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Handle invalid table DDL")
-    def test_invalid_table_ddl(self, mock_agent):
+    @pytest.mark.asyncio
+    async def test_invalid_table_ddl(self, mock_agent, mock_db_schema_tool):
         """Test handling of invalid table DDL."""
-        # Mock the db_schema_tool to return invalid DDL
-        mock_db_tool = MagicMock()
-        mock_db_tool.get_table_schema.return_value = "INSERT INTO products VALUES (1, 'test');"
-        mock_db_tool.get_table_columns.side_effect = Exception("Could not retrieve columns")
-        
-        # Переопределяем поведение mock_agent для этого теста
+        # Override the mock response for this specific test
         mock_agent.process_query.return_value = {
             "choices": [{
                 "message": {
@@ -240,7 +257,14 @@ LIMIT: 10"""
             }]
         }
         
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_tool)
+        # Изменяем возвращаемое значение get_table_schema на некорректный DDL
+        mock_db_schema_tool.get_table_schema.return_value = "INSERT INTO products VALUES (1, 'test');"
+        mock_db_schema_tool.get_table_columns.side_effect = Exception("Could not retrieve columns")
+        
+        # Создаем экземпляр генератора с нашими моками
+        with patch.object(SQLGenerator, "create") as mock_create:
+            generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
+            mock_create.return_value = generator
         
         # Переопределяем метод _extract_column_names для тестирования
         def mock_extract_column_names(ddl):
@@ -252,7 +276,7 @@ LIMIT: 10"""
 
         # Generate SQL components - should raise an error
         with pytest.raises(InvalidSQLError):
-            generator.generate_sql_components(
+            await generator.generate_sql_components(
                 "Find products",
                 "Sort by rating"
             )
@@ -260,27 +284,17 @@ LIMIT: 10"""
     @allure.story("Prompt Generation")
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Build SQL generation prompt")
-    def test_build_sql_generation_prompt(self, mock_agent, sample_ddl):
+    @pytest.mark.asyncio
+    async def test_build_sql_generation_prompt(self, async_sql_generator, sample_ddl):
         """Test building the SQL generation prompt."""
-        # Mock the db_schema_tool
-        mock_db_tool = MagicMock()
-        mock_db_tool.get_table_columns.return_value = [
-            {"name": "id", "type": "INT"},
-            {"name": "name", "type": "VARCHAR"},
-            {"name": "category", "type": "VARCHAR"},
-            {"name": "price", "type": "DECIMAL"},
-            {"name": "rating", "type": "DECIMAL"},
-            {"name": "stock", "type": "INT"}
-        ]
-        
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_tool)
+        generator = async_sql_generator
 
         # Test inputs
         filter_text = "Find products in the electronics category"
         constraint_text = "Price should be less than 1000"
 
         # Build the prompt
-        prompt = generator._build_sql_generation_prompt(filter_text, constraint_text, sample_ddl)
+        prompt = await generator._build_sql_generation_prompt(filter_text, constraint_text, sample_ddl)
 
         # Verify the prompt contains the expected sections
         assert "Сгенерируй компоненты SQL" in prompt
@@ -293,12 +307,9 @@ LIMIT: 10"""
     @allure.story("Response Parsing")
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Extract structured response from model output")
-    def test_extract_structured_response(self, mock_agent):
+    def test_extract_structured_response(self, mock_agent, mock_db_schema_tool):
         """Test extracting structured response from model output."""
-        # Mock the db_schema_tool
-        mock_db_tool = MagicMock()
-        
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_tool)
+        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
 
         # Test response text
         response_text = """Based on the provided information, here are the SQL query components:
@@ -323,12 +334,9 @@ LIMIT: 10"""
     @allure.story("Basic SQL Generation")
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Generate full SQL from components")
-    def test_generate_full_sql(self, mock_agent):
+    def test_generate_full_sql(self, mock_agent, mock_db_schema_tool):
         """Test generating full SQL from components."""
-        # Mock the db_schema_tool
-        mock_db_tool = MagicMock()
-        
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_tool)
+        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
 
         # Test components
         components = {
@@ -352,7 +360,8 @@ LIMIT: 10"""
     @allure.story("Advanced SQL Generation")
     @allure.severity(allure.severity_level.CRITICAL)
     @allure.title("Generate SQL for median calculation")
-    def test_median_query_generation(self, mock_agent, sample_ddl):
+    @pytest.mark.asyncio
+    async def test_median_query_generation(self, mock_agent, mock_db_schema_tool, sample_ddl):
         """Test generating SQL for median calculation."""
         # Override the mock response for this specific test
         mock_agent.process_query.return_value = {
@@ -369,18 +378,17 @@ LIMIT: 5"""
             }]
         }
         
-        # Mock the db_schema_tool
-        mock_db_tool = MagicMock()
-        mock_db_tool.get_table_schema.return_value = sample_ddl
-        
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_tool)
+        # Создаем экземпляр генератора с нашими моками
+        with patch.object(SQLGenerator, "create") as mock_create:
+            generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
+            mock_create.return_value = generator
 
         # Test inputs for median query
         filter_text = "Find products in the electronics category"
         constraint_text = "With price higher than the median price, group by category, sort by average price, and limit to 5 results"
 
         # Generate SQL components
-        result = generator.generate_sql_components(filter_text, constraint_text)
+        result = await generator.generate_sql_components(filter_text, constraint_text)
 
         # Verify the results
         assert "sql_components" in result
@@ -392,35 +400,34 @@ LIMIT: 5"""
 
     @allure.story("Initialization")
     @allure.severity(allure.severity_level.NORMAL)
-    @allure.title("Initialize SQLGenerator without providing an agent")
-    def test_initialization_without_agent(self):
-        """Test initializing SQLGenerator without providing an agent."""
-        # Mock the GigachatAgent class to avoid actual API calls
+    @allure.title("Create SQLGenerator instance asynchronously")
+    @pytest.mark.asyncio
+    async def test_create_method(self):
+        """Test the asynchronous create method of SQLGenerator."""
         with patch("src.agent.sql_generator.GigachatAgent") as mock_agent_class, \
              patch("src.agent.sql_generator.DBSchemaReferenceTool") as mock_db_tool_class:
+            
+            # Настраиваем моки для GigachatAgent и DBSchemaReferenceTool
             mock_agent = MagicMock()
             mock_agent_class.return_value = mock_agent
             
             mock_db_tool = MagicMock()
-            mock_db_tool_class.return_value = mock_db_tool
+            mock_db_tool_class.create.return_value = mock_db_tool
             
-            # Initialize without providing an agent
-            generator = SQLGenerator()
+            # Вызываем метод create
+            generator = await SQLGenerator.create()
             
-            # Verify that a new agent was created
+            # Проверяем, что методы были вызваны правильно
             assert generator.agent is not None
-            assert mock_agent_class.called
-            assert mock_db_tool_class.called
+            assert generator.db_schema_tool is not None
+            assert mock_db_tool_class.create.called
 
     @allure.story("Response Parsing")
     @allure.severity(allure.severity_level.NORMAL)
     @allure.title("Extract SQL components using regex")
-    def test_extract_sql_components_regex(self, mock_agent):
+    def test_extract_sql_components_regex(self, mock_agent, mock_db_schema_tool):
         """Test extracting SQL components using regex."""
-        # Mock the db_schema_tool
-        mock_db_tool = MagicMock()
-        
-        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_tool)
+        generator = SQLGenerator(agent=mock_agent, db_schema_tool=mock_db_schema_tool)
 
         # Test response text
         response_text = """Based on the provided information, here are the SQL query components:
