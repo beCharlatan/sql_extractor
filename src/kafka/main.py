@@ -39,12 +39,12 @@ def process_result(message, result):
         message: Исходное сообщение Kafka.
         result: Результат обработки.
     """
-    message_id = message.get("message_id", "unknown")
+    request_hash = message.get("request_hash", "unknown")
     
     if "error" in result:
-        logger.error(f"Error processing message {message_id}: {result['error']['message']}")
+        logger.error(f"Error processing message with request_hash {request_hash}: {result['error']['message']}")
     else:
-        logger.info(f"Successfully processed message {message_id}")
+        logger.info(f"Successfully processed message with request_hash {request_hash}")
         logger.debug(f"SQL components: {result.get('sql_components', {})}")
 
 

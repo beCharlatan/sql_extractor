@@ -63,7 +63,7 @@ class KafkaProducer:
         self,
         filter_text: str,
         constraint_text: str,
-        message_id: Optional[str] = None,
+        request_hash: Optional[str] = None,
         headers: Optional[Dict[str, str]] = None,
     ) -> str:
         """Send a message to the Kafka topic.
@@ -71,11 +71,11 @@ class KafkaProducer:
         Args:
             filter_text: Filter text for SQL generation.
             constraint_text: Constraint text for SQL generation.
-            message_id: Optional message ID. If not provided, a UUID will be generated.
+            request_hash: Optional request hash. If not provided, a UUID will be generated.
             headers: Optional headers to include with the message.
             
         Returns:
-            The message ID.
+            The request hash.
             
         Raises:
             KafkaError: If sending the message fails.
@@ -83,14 +83,14 @@ class KafkaProducer:
         if not self.producer:
             raise KafkaError("Producer not started")
         
-        # Generate a message ID if not provided
-        message_id = message_id or str(uuid.uuid4())
+        # Generate a request hash if not provided
+        request_hash = request_hash or str(uuid.uuid4())
         
         # Create the message
         message = {
             "filter": filter_text,
             "constraint": constraint_text,
-            "message_id": message_id,
+            "request_hash": request_hash,
         }
         
         # Add headers if provided
@@ -104,18 +104,18 @@ class KafkaProducer:
                 value=message,
             )
             
-            logger.info(f"Sent message {message_id} to topic {self.topic}")
-            return message_id
+            logger.info(f"Sent message with request_hash {request_hash} to topic {self.topic}")
+            return request_hash
         except Exception as e:
             error_msg = f"Failed to send message to Kafka: {str(e)}"
             logger.error(error_msg)
-            raise KafkaError(error_msg, details={"original_error": str(e), "message_id": message_id})
+            raise KafkaError(error_msg, details={"original_error": str(e), "request_hash": request_hash})
 
 
 async def send_sql_generation_request(
     filter_text: str,
     constraint_text: str,
-    message_id: Optional[str] = None,
+    request_hash: Optional[str] = None,
     headers: Optional[Dict[str, str]] = None,
 ) -> str:
     """Send a SQL generation request to the Kafka topic.
@@ -125,11 +125,11 @@ async def send_sql_generation_request(
     Args:
         filter_text: Filter text for SQL generation.
         constraint_text: Constraint text for SQL generation.
-        message_id: Optional message ID. If not provided, a UUID will be generated.
+        request_hash: Optional request hash. If not provided, a UUID will be generated.
         headers: Optional headers to include with the message.
         
     Returns:
-        The message ID.
+        The request hash.
         
     Raises:
         KafkaError: If sending the message fails.
@@ -138,12 +138,12 @@ async def send_sql_generation_request(
     
     try:
         await producer.start()
-        message_id = await producer.send_message(
+        request_hash = await producer.send_message(
             filter_text=filter_text,
             constraint_text=constraint_text,
-            message_id=message_id,
+            request_hash=request_hash,
             headers=headers,
         )
-        return message_id
+        return request_hash
     finally:
         await producer.stop()

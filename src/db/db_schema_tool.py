@@ -15,7 +15,7 @@ class DBSchemaReferenceTool(BaseDBClient):
     сортировки и других операций.
     """
 
-    def __init__(self, connection_string: Optional[str] = None, db_key: str = 'schema'):
+    def __init__(self, connection_string: Optional[str] = None, slave_connection_string: Optional[str] = None, db_key: str = 'schema'):
         """Инициализация инструмента для работы со схемой базы данных.
 
         Аргументы:
@@ -24,10 +24,10 @@ class DBSchemaReferenceTool(BaseDBClient):
             db_key: Уникальный идентификатор для этого подключения к базе данных.
                   По умолчанию 'schema'.
         """
-        super().__init__(connection_string, db_key=db_key)
+        super().__init__(connection_string, slave_connection_string=slave_connection_string, db_key=db_key)
 
     @classmethod
-    async def create(cls, connection_string: Optional[str] = None, db_key: str = 'schema') -> 'DBSchemaReferenceTool':
+    async def create(cls, connection_string: Optional[str] = None, slave_connection_string: Optional[str] = None, db_key: str = 'schema') -> 'DBSchemaReferenceTool':
         """Асинхронная инициализация инструмента для работы со схемой базы данных.
 
         Аргументы:
@@ -36,7 +36,7 @@ class DBSchemaReferenceTool(BaseDBClient):
             db_key: Уникальный идентификатор для этого подключения к базе данных.
                   По умолчанию 'schema'.
         """
-        instance = await super().create(connection_string=connection_string, db_key=db_key)
+        instance = await super().create(connection_string=connection_string, slave_connection_string=slave_connection_string, db_key=db_key)
         return instance
 
     async def get_table_schema(self, table_name: str) -> str:

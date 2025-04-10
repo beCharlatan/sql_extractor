@@ -129,8 +129,7 @@ producer.send_message({
 Запрос должен содержать следующие поля:
 
 - `filter`: Текст фильтра на естественном языке
-- `constraint`: Текст ограничения на естественном языке
-- `message_id` (опционально): Уникальный идентификатор сообщения
+- `constraint`: Текст ограничения на естественном языке сообщения
 
 ### Формат ответа
 
@@ -150,7 +149,6 @@ producer.send_message({
 ```sql
 CREATE TABLE organization_filters (
     id SERIAL PRIMARY KEY,
-    message_id TEXT,
     filter_text TEXT NOT NULL,
     constraint_text TEXT NOT NULL,
     where_clause TEXT,
@@ -367,7 +365,6 @@ def send_test_message():
     message = {
         'filter': 'Найти продукты в категории электроника с ценой меньше 1000',
         'constraint': 'Отсортировать по рейтингу по убыванию и ограничить 10 результатами',
-        'message_id': 'test-message-001'  # Опционально
     }
 
     # Отправка сообщения

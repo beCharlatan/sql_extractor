@@ -18,12 +18,12 @@ async def test_kafka_producer():
     logger.info("Testing Kafka producer...")
     
     try:
-        message_id = await send_sql_generation_request(
+        request_hash = await send_sql_generation_request(
             filter_text="products with price greater than 100",
             constraint_text="sort by price in descending order",
         )
         
-        logger.info(f"Successfully sent message with ID {message_id}")
+        logger.info(f"Successfully sent message with request_hash {request_hash}")
         return True
     except Exception as e:
         logger.exception(f"Error sending message: {str(e)}")

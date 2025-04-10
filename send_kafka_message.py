@@ -27,8 +27,8 @@ async def main():
         help="Constraint text for SQL generation",
     )
     parser.add_argument(
-        "--message-id", "-m",
-        help="Optional message ID (UUID will be generated if not provided)",
+        "--request-hash", "-r",
+        help="Optional request hash (UUID will be generated if not provided)",
     )
     
     args = parser.parse_args()
@@ -36,14 +36,14 @@ async def main():
     setup_logging()
     
     try:
-        message_id = await send_sql_generation_request(
+        request_hash = await send_sql_generation_request(
             filter_text=args.filter,
             constraint_text=args.constraint,
-            message_id=args.message_id,
+            request_hash=args.request_hash,
         )
         
-        logger.info(f"Successfully sent message with ID {message_id}")
-        print(f"Message sent with ID: {message_id}")
+        logger.info(f"Successfully sent message with request_hash {request_hash}")
+        print(f"Message sent with request_hash: {request_hash}")
         return 0
     except Exception as e:
         logger.exception(f"Error sending message: {str(e)}")

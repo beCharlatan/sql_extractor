@@ -29,7 +29,7 @@ class BaseDBClient:
         self.min_connections = settings.database.min_connections
         self.max_connections = settings.database.max_connections
 
-        self.master_connection_string = connection_string or settings.database.get_connection_string()
+        self.connection_string = connection_string or settings.database.get_connection_string()
         self.slave_connection_string = slave_connection_string or getattr(
             settings.database, 'get_slave_connection_string', lambda: None
         )()
@@ -61,8 +61,8 @@ class BaseDBClient:
     def _parse_connection_strings(self):
         """Парсинг строк подключения."""
         try:
-            if self.master_connection_string:
-                self.master_conn_params = self._parse_single_connection_string(self.master_connection_string)
+            if self.connection_string:
+                self.master_conn_params = self._parse_single_connection_string(self.connection_string)
             if self.slave_connection_string:
                 self.slave_conn_params = self._parse_single_connection_string(self.slave_connection_string)
         except Exception as e:

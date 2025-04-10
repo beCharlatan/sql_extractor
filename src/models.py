@@ -1,8 +1,16 @@
 """Модели данных для приложения генератора SQL."""
 
 from pydantic import BaseModel, Field, field_validator
+from enum import Enum
 import hashlib
 from typing import Optional
+
+
+class TaskSubtype(str, Enum):
+    """Перечисление возможных подтипов задач."""
+    
+    NEW_SALARY_AGREEMENT = "Новый зарплатный договор"
+    EXTEND_SALARY_AGREEMENT = "Расширение зарплатного договора"
 
 
 class GenerateSQLRequest(BaseModel):
@@ -12,6 +20,21 @@ class GenerateSQLRequest(BaseModel):
         None,
         description="Уникальный идентификатор запроса",
         pattern="^[a-fA-F0-9]{32}$",
+    )
+    gosb_id: str = Field(
+        ...,
+        description="ГОСБ Руководителя ЗП",
+        min_length=1,
+    )
+    tb_id: str = Field(
+        ...,
+        description="Территориальный банк Руководителя ЗП",
+        min_length=1,
+    )
+    pers_number: str = Field(
+        ...,
+        description="Табельный номер Руководителя ЗП",
+        min_length=1,
     )
     filter: str = Field(
         ...,
