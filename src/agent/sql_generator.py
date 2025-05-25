@@ -4,6 +4,7 @@ import json
 import re
 from typing import Any, Dict, List, Optional
 
+from agent.enriched_query import EnrichedQuery
 from src.db.db_schema_tool import DBSchemaReferenceTool
 
 from loguru import logger
@@ -14,7 +15,6 @@ from src.utils.errors import (
     InvalidSQLError,
     InvalidTableDDLError,
     SQLGenerationError,
-    ValidationError,
 )
 
 
@@ -35,6 +35,7 @@ class SQLGenerator:
             table_name: Имя таблицы, для которой генерируется SQL.
         """
         self.agent = agent or GigachatAgent()
+        self.enriched_query = EnrichedQuery()
         self.db_schema_tool = db_schema_tool
         self.table_name = table_name
         logger.info(f"Initialized SQLGenerator for table {table_name}")
@@ -92,49 +93,20 @@ class SQLGenerator:
             SQLGenerationError: Если генерация SQL не удалась
         """
         try:
-            # Проверка входных данных
-            if not filter_text or not filter_text.strip():
-                raise ValidationError(
-                    "Filter text cannot be empty",
-                    details={"field": "filter"}
-                )
-                
-            if not constraint_text or not constraint_text.strip():
-                raise ValidationError(
-                    "Constraint text cannot be empty",
-                    details={"field": "constraint"}
-                )
-                
-            if len(filter_text) > 400:
-                raise ValidationError(
-                    "Filter text exceeds maximum length of 400 characters",
-                    details={"field": "filter", "value": len(filter_text)}
-                )
-                
-            if len(constraint_text) > 400:
-                raise ValidationError(
-                    "Constraint text exceeds maximum length of 400 characters",
-                    details={"field": "constraint", "value": len(constraint_text)}
-                )
-                
-            # Получение DDL таблицы из базы данных
-            try:
-                table_ddl = await self.db_schema_tool.get_table_schema(self.table_name)
-                logger.debug(f"Retrieved table schema for {self.table_name}")
-            except Exception as e:
-                logger.error(f"Error retrieving table schema for {self.table_name}: {str(e)}")
-                raise
+            table_ddl = await self.db_schema_tool.get_table_schema(self.table_name)
+            logger.debug(f"Retrieved table schema for {self.table_name}")
             
             logger.info("Generating SQL components from natural language input")
             logger.debug(f"Filter: {filter_text}")
             logger.debug(f"Constraint: {constraint_text}")
 
             # Создание промпта для модели
-            prompt = await self._build_sql_generation_prompt(filter_text, constraint_text, table_ddl)
+            enriched_query = await self.enriched_query.process(filter=filter_text, constraint=constraint_text)
+            prompt = await self._build_sql_generation_prompt(enriched_query, table_ddl)
 
             try:
                 # Обработка запроса с помощью агента
-                response = self.agent.process_query(prompt)
+                response = await self.agent.process_query(prompt)
                 
                 # Извлекаем текст ответа в зависимости от структуры ответа API
                 if isinstance(response, dict) and "choices" in response:
@@ -178,10 +150,7 @@ class SQLGenerator:
             logger.debug(f"SQL components: {result['sql_components']}")
             
             return result
-            
-        except (ValidationError, InvalidTableDDLError, GigachatAPIError, SQLGenerationError, InvalidSQLError):
-            # Повторно вызываем известные исключения для правильной обработки выше
-            raise
+        
         except Exception as e:
             # Перехват любых других неожиданных исключений
             logger.exception(f"Unexpected error in SQL generation: {str(e)}")
@@ -190,12 +159,11 @@ class SQLGenerator:
                 details={"original_error": str(e)}
             )
 
-    async def _build_sql_generation_prompt(self, filter_text: str, constraint_text: str, table_ddl: str) -> str:
+    async def _build_sql_generation_prompt(self, query: str, table_ddl: str) -> str:
         """Создание промпта для генерации SQL.
 
         Аргументы:
-            filter_text: Описание фильтра на естественном языке.
-            constraint_text: Описание ограничения на естественном языке.
+            query: Запрос на естественном языке.
             table_ddl: DDL-определение таблицы для запроса.
 
         Возвращает:
@@ -244,11 +212,8 @@ class SQLGenerator:
 ```
 {column_info}
 
-## Фильтр
-{filter_text}
-
-## Ограничение
-{constraint_text}
+[Запрос]
+{query}
 
 ## Инструкции
 На основе определения таблицы и предоставленного фильтра и ограничения, сгенерируй следующие компоненты SQL-запроса:

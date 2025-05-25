@@ -3,6 +3,9 @@ gigachat==0.1.38
 pydantic==2.10.6
 python-dotenv==1.0.1
 loguru==0.7.3
+fastapi==0.111.0
+prometheus-client==0.20.0
+uvicorn==0.29.0
 
 # Database dependencies
 psycopg2-binary==2.9.9

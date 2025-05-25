@@ -50,7 +50,7 @@ class GigachatAgent:
             logger.error(error_msg)
             raise GigachatAPIError(error_msg, details={"original_error": str(e)})
 
-    def process_query(self, query: str) -> Dict[str, Any]:
+    async def process_query(self, query: str) -> Dict[str, Any]:
         """Обработка запроса пользователя с использованием модели Gigachat.
 
         Аргументы:
@@ -68,7 +68,7 @@ class GigachatAgent:
             logger.debug(f"Query text: {query}")
             
             # Вызываем API Gigachat без параметров temperature и max_tokens
-            response = self.client.chat(query)
+            response = await self.client.achat(query)
             
             logger.info("Query processed successfully")
             return response

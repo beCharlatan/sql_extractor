@@ -5,6 +5,7 @@ from loguru import logger
 
 from src.db.base_db_client import BaseDBClient
 from src.utils.errors import DatabaseError
+from db_response_cache import cache
 
 
 class DBSchemaReferenceTool(BaseDBClient):
@@ -39,6 +40,7 @@ class DBSchemaReferenceTool(BaseDBClient):
         instance = await super().create(connection_string=connection_string, slave_connection_string=slave_connection_string, db_key=db_key)
         return instance
 
+    @cache.cached(prefix='ddl')
     async def get_table_schema(self, table_name: str) -> str:
         """Получение DDL (оператора CREATE TABLE) для конкретной таблицы.
 
@@ -93,6 +95,7 @@ class DBSchemaReferenceTool(BaseDBClient):
             logger.error(error_msg)
             raise DatabaseError(error_msg, details={"table_name": table_name, "original_error": str(e)})
 
+    @cache.cached(prefix='row')
     async def get_table_columns(self, table_name: str) -> List[Dict[str, str]]:
         """Получение подробной информации о столбцах в таблице.
 
