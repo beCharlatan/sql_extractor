@@ -1,7 +1,7 @@
 from typing import Optional
 from loguru import logger
 
-from agent.agent import GigachatAgent
+from src.agent.agent import GigachatAgent
 from db.db_schema_tool import DBSchemaReferenceTool
 
 

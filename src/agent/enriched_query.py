@@ -2,7 +2,7 @@ from typing import Optional
 from loguru import logger
 
 
-from agent.agent import GigachatAgent
+from src.agent.agent import GigachatAgent
 
 class EnrichedQuery:
     def __init__(
@@ -33,7 +33,7 @@ class EnrichedQuery:
 
         try:
             response = await self.agent.process_query(prompt)
-            expanded_query = response.strip('"')
+            expanded_query = response["choices"][0]["message"]["content"].strip('"')
             return expanded_query
         except Exception as e:
             logger.error(f"Synonym expansion failed: {str(e)}")

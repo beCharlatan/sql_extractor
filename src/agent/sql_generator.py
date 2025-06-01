@@ -2,9 +2,9 @@
 
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-from agent.enriched_query import EnrichedQuery
+# from src.agent.enriched_query import EnrichedQuery
 from src.db.db_schema_tool import DBSchemaReferenceTool
 
 from loguru import logger
@@ -13,7 +13,6 @@ from src.agent.agent import GigachatAgent
 from src.utils.errors import (
     GigachatAPIError,
     InvalidSQLError,
-    InvalidTableDDLError,
     SQLGenerationError,
 )
 
@@ -35,7 +34,7 @@ class SQLGenerator:
             table_name: Имя таблицы, для которой генерируется SQL.
         """
         self.agent = agent or GigachatAgent()
-        self.enriched_query = EnrichedQuery()
+        # self.enriched_query = EnrichedQuery()
         self.db_schema_tool = db_schema_tool
         self.table_name = table_name
         logger.info(f"Initialized SQLGenerator for table {table_name}")
@@ -101,8 +100,8 @@ class SQLGenerator:
             logger.debug(f"Constraint: {constraint_text}")
 
             # Создание промпта для модели
-            enriched_query = await self.enriched_query.process(filter=filter_text, constraint=constraint_text)
-            prompt = await self._build_sql_generation_prompt(enriched_query, table_ddl)
+            # enriched_query = await self.enriched_query.process(filter=filter_text, constraint=constraint_text)
+            prompt = await self._build_sql_generation_prompt(filter=filter_text, constraint=constraint_text, table_ddl=table_ddl)
 
             try:
                 # Обработка запроса с помощью агента
@@ -159,7 +158,7 @@ class SQLGenerator:
                 details={"original_error": str(e)}
             )
 
-    async def _build_sql_generation_prompt(self, query: str, table_ddl: str) -> str:
+    async def _build_sql_generation_prompt(self, filter: str, constraint: str, table_ddl: str) -> str:
         """Создание промпта для генерации SQL.
 
         Аргументы:
@@ -173,49 +172,30 @@ class SQLGenerator:
         column_info = ""
         try:
             columns = await self.db_schema_tool.get_table_columns(self.table_name)
-            column_names = [col["name"] for col in columns]
-            column_info = f"\n\n## Информация о столбцах\nТаблица: {self.table_name}\nИмена столбцов: {', '.join(column_names)}"
+            column_info = ""
             
-            # Добавление типов данных для лучшего контекста
-            column_types = [f"{col['name']} ({col['type']})" for col in columns]
-            column_info += f"\nТипы столбцов: {', '.join(column_types)}"
-            
-            # Попытка получить описания параметров, если они доступны
-            parameter_descriptions = []
             try:
                 for col in columns:
-                    try:
-                        param_info = await self.db_schema_tool.get_parameter_info(col["name"])
-                        if param_info and "description" in param_info:
-                            parameter_descriptions.append(f"{col['name']}: {param_info['description']}")
-                    except Exception:
-                        pass
-                if parameter_descriptions:
-                    column_info += f"\n\nОписания параметров:\n{chr(10).join(parameter_descriptions)}"
+                    column_info += f"{col['attr_name']}: {col['description']}\n"
             except Exception as e:
                 logger.warning(f"Could not retrieve parameter descriptions: {str(e)}")
         except Exception as e:
             logger.warning(f"Could not retrieve column information: {str(e)}")
-            # Запасной вариант - извлечение из DDL
-            try:
-                column_names = self._extract_column_names(table_ddl)
-                if column_names:
-                    column_info = f"\n\n## Информация о столбцах\nИмена столбцов: {', '.join(column_names)}"
-            except Exception as e:
-                logger.warning(f"Could not extract column names from DDL: {str(e)}")
         
-        return f"""Сгенерируй компоненты SQL-запроса на основе следующей информации:
-
-## Определение таблицы
+        return f"""Ты SQL-агент. Сгенерируй компоненты SQL-запроса на основе следующей информации:
+   
+[DDL таблицы данных]
 ```sql
 {table_ddl}
 ```
+[Бизнесовое определение атрибутов данных]
 {column_info}
 
 [Запрос]
-{query}
+{filter.lower()}
+{constraint.lower()}
 
-## Инструкции
+[Инструкции]
 На основе определения таблицы и предоставленного фильтра и ограничения, сгенерируй следующие компоненты SQL-запроса:
 1. WHERE - для фильтрации данных в соответствии с описанием фильтра
 2. GROUP BY - для группировки данных, если требуется агрегация или вычисление статистических показателей (например, медианы)
@@ -237,7 +217,41 @@ class SQLGenerator:
 }}
 ```
 
-Для SQL-компонентов:
+[Правила для обработки строковых значений]
+1. Для игнорирования окончаний слов:
+   - Всегда используй оператор `ILIKE` (регистронезависимый поиск)
+   - Добавляй символы `%` только ПОСЛЕ основы слова
+   - Основу слова определяй как:
+     * Для слов >6 букв: отсекай последние 2-3 символа
+     * Для слов 4-6 букв: отсекай последний 1 символ
+     * Для слов <4 букв: используй полное слово
+
+2. Примеры преобразования:
+   - "производство" → "производств%" (12 букв >6 → отсекли 2)
+   - "компании" → "компани%" (8 букв >6 → отсекли 2)
+   - "поле" → "пол%" (4 буквы → отсекли 1)
+   - "IT" → "IT" (2 буквы <4 → полное слово)
+
+3. Для фраз из нескольких слов:
+   - Разбивай запрос на отдельные слова
+   - Для каждого слова применяй правила выше
+   - Объединяй условия через `OR`:
+     ```sql
+     WHERE column ILIKE 'основа1%' 
+       OR column ILIKE 'основа2%'
+     ```
+
+4. Для точных совпадений (если нужно):
+   - Если пользователь указывает кавычки: "текст"
+   - Используй точное сравнение: `= 'текст'`
+
+[Правила обработки географических названий]
+1. Извлекай ТОЛЬКО ядро названия, удаляя типы объектов:
+   - Автоматически удаляй слова: район, область, поселок, город, деревня, село, р-н, обл, пгт, г, д, п 
+   - Учитывай все падежи (например: района, области, поселка, городской)
+   - В остальном пользуйся правилами для обработки строковых значений
+
+[ПРОВЕРКА]
 - Не включай ключевые слова 'WHERE', 'GROUP BY', 'HAVING', 'ORDER BY' или 'LIMIT' в свои условия
 - Убедись, что используешь правильные имена столбцов из определения таблицы
 - Используй правильный синтаксис SQL с соответствующими операторами (=, <, >, LIKE, IN и т.д.)
@@ -390,38 +404,7 @@ class SQLGenerator:
             if key not in components:
                 components[key] = ""  # Initialize missing keys with empty strings
                 logger.warning(f"Missing SQL component: {key}. Initialized with empty string.")
-        
-        # Извлечение имен столбцов из DDL таблицы
-        try:
-            column_names = self._extract_column_names(table_ddl)
-            if not column_names:
-                raise InvalidTableDDLError(
-                    "Could not extract any column names from the table DDL",
-                    details={"table_ddl": table_ddl[:100] + "..."}
-                )
-            logger.debug(f"Extracted column names: {column_names}")
-        except Exception as e:
-            raise InvalidTableDDLError(
-                f"Error extracting column names from table DDL: {str(e)}",
-                details={"table_ddl": table_ddl[:100] + "...", "error": str(e)}
-            )
 
-        # Проверка, использует ли сгенерированный SQL допустимые имена столбцов
-        for component_name in ["where_clause", "group_by_clause", "having_clause", "order_by_clause"]:
-            component = components[component_name]
-            if component:
-                # Базовая проверка - проверка, содержит ли компонент допустимые имена столбцов
-                valid = False
-                for column in column_names:
-                    if column.lower() in component.lower():
-                        valid = True
-                        break
-
-                if not valid:
-                    logger.warning(f"Generated {component_name} does not contain any valid column names")
-                    # Мы не исправляем это автоматически, но предупреждаем об этом
-                    # Это может быть ложным срабатыванием, если компонент использует псевдонимы или функции
-        
         # Проверка на наличие шаблонов SQL-инъекций
         sql_injection_patterns = [
             r'--',  # SQL comment
@@ -457,27 +440,3 @@ class SQLGenerator:
         self._generate_full_sql(components)
 
         return components
-
-    def _extract_column_names(self, table_ddl: str) -> List[str]:
-        """Извлечение имен столбцов из DDL таблицы.
-
-        Аргументы:
-            table_ddl: DDL таблицы, из которого извлекаются имена столбцов.
-
-        Возвращает:
-            Список имен столбцов.
-        """
-        column_names = []
-        
-        # Использование регулярных выражений для извлечения определений столбцов
-        # Это упрощенный подход, который может потребовать корректировки для сложных DDL
-        column_pattern = r'\s*([\w_]+)\s+([\w\(\)]+)'  # Matches "column_name data_type"
-        matches = re.finditer(column_pattern, table_ddl)
-        
-        for match in matches:
-            column_name = match.group(1)
-            # Пропуск, если совпадение является ключевым словом SQL
-            if column_name.upper() not in ["CREATE", "TABLE", "PRIMARY", "KEY", "FOREIGN", "REFERENCES", "NOT", "NULL", "DEFAULT", "AUTO_INCREMENT"]:
-                column_names.append(column_name)
-        
-        return column_names

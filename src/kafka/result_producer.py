@@ -16,7 +16,6 @@ class ResultProducer:
     def __init__(
         self,
         bootstrap_servers: str = None,
-        topic: str = None,
     ):
         """Initialize the result producer.
         
@@ -25,7 +24,7 @@ class ResultProducer:
             topic: Kafka topic to produce to. Defaults to settings.kafka.result_topic.
         """
         self.bootstrap_servers = bootstrap_servers or settings.kafka.bootstrap_servers
-        self.topic = topic or settings.kafka.result_topic
+        self.topic = 'sql-generator-requests'
         self.producer = None
         
         logger.info(

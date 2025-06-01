@@ -142,27 +142,6 @@ producer.send_message({
 - `limit_clause`: Ограничение количества результатов LIMIT
 - `full_sql`: Полный SQL-запрос, объединяющий все компоненты
 
-## Структура базы данных
-
-Приложение создает таблицу `organization_filters` в PostgreSQL со следующей структурой:
-
-```sql
-CREATE TABLE organization_filters (
-    id SERIAL PRIMARY KEY,
-    filter_text TEXT NOT NULL,
-    constraint_text TEXT NOT NULL,
-    where_clause TEXT,
-    group_by_clause TEXT,
-    having_clause TEXT,
-    order_by_clause TEXT,
-    limit_clause TEXT,
-    full_sql TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    status TEXT NOT NULL DEFAULT 'success',
-    error_message TEXT
-);
-```
-
 ## Тестирование
 
 ### Запуск тестов
@@ -404,9 +383,6 @@ KAFKA_BOOTSTRAP_SERVERS=localhost:29092 uv run python send_kafka_message.py --fi
 ```bash
 # Проверка логов приложения
 docker-compose logs -f api
-
-# Проверка записи в базе данных PostgreSQL
-docker-compose exec db psql -U postgres -d postgres -c "SELECT * FROM organization_filters ORDER BY created_at DESC LIMIT 5;"
 ```
 
 > **Примечание**: Убедитесь, что в вашем файле docker-compose.yml корректно настроены порты Kafka (обычно 9092) и они проброшены на хост-машину.

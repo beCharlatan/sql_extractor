@@ -144,7 +144,7 @@ class BaseDBClient:
         self,
         query: str,
         params: Optional[list] = None,
-        use_master: bool = False
+        use_master: bool = True
     ) -> Union[List[asyncpg.Record], str]:
         """Универсальный метод выполнения запроса"""
         conn = None
@@ -152,7 +152,7 @@ class BaseDBClient:
             conn = await (self.get_master_connection() if use_master else self.get_slave_connection())
             
             if use_master:
-                return await conn.execute(query, *(params or []))
+                return await conn.fetch(query, *(params or []))
             return await conn.fetch(query, *(params or []))
             
         except Exception as e:

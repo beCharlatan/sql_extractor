@@ -25,7 +25,7 @@ class GigachatSettings(BaseModel):
 
     api_key: str = Field(default=os.getenv("GIGACHAT_API_KEY", ""))
     credentials_path: Optional[str] = Field(default=os.getenv("GIGACHAT_CREDENTIALS_PATH", None))
-    model: str = Field(default=os.getenv("GIGACHAT_MODEL", "GigaChat"))
+    model: str = Field(default=os.getenv("GIGACHAT_MODEL", "GigaChat-Pro"))
     temperature: float = Field(default=float(os.getenv("GIGACHAT_TEMPERATURE", "0.7")))
     max_tokens: int = Field(default=int(os.getenv("GIGACHAT_MAX_TOKENS", "2048")))
 

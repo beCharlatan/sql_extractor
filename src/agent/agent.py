@@ -44,7 +44,7 @@ class GigachatAgent:
             if not credentials:
                 raise ValueError("No Gigachat credentials provided. Set GIGACHAT_API_KEY or GIGACHAT_CREDENTIALS_PATH.")
                 
-            return GigaChat(**credentials, scope="GIGACHAT_API_PERS", model="GigaChat", verify_ssl_certs=False)
+            return GigaChat(**credentials, scope="GIGACHAT_API_PERS", model="GigaChat-2-Max", verify_ssl_certs=False)
         except Exception as e:
             error_msg = f"Failed to initialize Gigachat client: {str(e)}"
             logger.error(error_msg)

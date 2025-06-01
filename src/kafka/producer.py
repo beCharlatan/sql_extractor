@@ -91,6 +91,9 @@ class KafkaProducer:
             "filter": filter_text,
             "constraint": constraint_text,
             "request_hash": request_hash,
+            "gosb_id": "123",
+            "pers_number": "321",
+            "tb_id": "1"
         }
         
         # Add headers if provided
