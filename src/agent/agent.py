@@ -1,4 +1,4 @@
-"""AI Agent implementation using Gigachat."""
+"""Реализация ИИ-агента с использованием Gigachat."""
 from typing import Any, Dict, Optional
 
 from gigachat import GigaChat
@@ -9,66 +9,66 @@ from src.utils.errors import GigachatAPIError, handle_exception
 
 
 class GigachatAgent:
-    """AI Agent implementation using Gigachat API."""
+    """Реализация ИИ-агента с использованием API Gigachat."""
 
     def __init__(self, model: Optional[str] = None):
-        """Initialize the Gigachat agent.
+        """Инициализация агента Gigachat.
 
-        Args:
-            model: Optional model name to use. Defaults to the one specified in settings.
+        Аргументы:
+            model: Опциональное название модели для использования. По умолчанию используется модель, указанная в настройках.
         """
         self.model = model or settings.gigachat.model
         self.client = self._initialize_client()
         logger.info(f"Initialized GigachatAgent with model: {self.model}")
 
     def _initialize_client(self) -> GigaChat:
-        """Initialize the Gigachat client.
+        """Инициализация клиента Gigachat.
 
-        Returns:
-            Initialized Gigachat client.
+        Возвращает:
+            Инициализированный клиент Gigachat.
 
-        Raises:
-            GigachatAPIError: If client initialization fails.
+        Вызывает исключение:
+            GigachatAPIError: Если инициализация клиента не удалась.
         """
         try:
             credentials = {}
             
-            # Use API key if provided
+            # Использовать API ключ, если он предоставлен
             if settings.gigachat.api_key:
                 credentials["credentials"] = settings.gigachat.api_key
             
-            # Use credentials file if provided
+            # Использовать файл учетных данных, если он предоставлен
             if settings.gigachat.credentials_path:
                 credentials["credentials_path"] = settings.gigachat.credentials_path
                 
             if not credentials:
                 raise ValueError("No Gigachat credentials provided. Set GIGACHAT_API_KEY or GIGACHAT_CREDENTIALS_PATH.")
                 
-            return GigaChat(**credentials, scope="GIGACHAT_API_PERS", model="GigaChat", verify_ssl_certs=False)
+            return GigaChat(**credentials, scope="GIGACHAT_API_PERS", model="GigaChat-2-Max", verify_ssl_certs=False)
         except Exception as e:
             error_msg = f"Failed to initialize Gigachat client: {str(e)}"
             logger.error(error_msg)
             raise GigachatAPIError(error_msg, details={"original_error": str(e)})
 
-    def process_query(self, query: str) -> Dict[str, Any]:
-        """Process a user query using the Gigachat model.
+    async def process_query(self, query: str) -> Dict[str, Any]:
+        """Обработка запроса пользователя с использованием модели Gigachat.
 
-        Args:
-            query: The user's query text.
+        Аргументы:
+            query: Текст запроса пользователя.
 
-        Returns:
-            Dictionary containing the model's response.
+        Возвращает:
+            Словарь, содержащий ответ модели.
 
-        Raises:
-            GigachatAPIError: If the API call fails.
+        Вызывает исключение:
+            GigachatAPIError: Если вызов API завершается с ошибкой.
         """
         try:
-            # Log parameters but don't use them as API doesn't support them
+            # Логируем параметры, но не используем их, так как API их не поддерживает
             logger.info(f"Processing query with temperature: {settings.gigachat.temperature}, max_tokens: {settings.gigachat.max_tokens}")
             logger.debug(f"Query text: {query}")
             
-            # Call the Gigachat API without temperature and max_tokens parameters
-            response = self.client.chat(query)
+            # Вызываем API Gigachat без параметров temperature и max_tokens
+            response = await self.client.achat(query)
             
             logger.info("Query processed successfully")
             return response
