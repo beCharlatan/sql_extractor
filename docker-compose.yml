@@ -1,33 +1,9 @@
 version: '3.8'
 
 services:
-  # Asynchronous Kafka consumer service
-  kafka-consumer:
-    build: .
-    command: python -m src.kafka.main
-    environment:
-      - LOG_LEVEL=DEBUG
-      - GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=parameters_db
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres_password
-      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
-      - KAFKA_TOPIC=sql-generator-requests
-      - KAFKA_GROUP_ID=sql-generator-group
-      - KAFKA_AUTO_OFFSET_RESET=earliest
-      - KAFKA_ENABLE_AUTO_COMMIT=true
-      - KAFKA_CONSUMER_TIMEOUT_MS=1000
-    volumes:
-      - ./logs:/app/logs
-    restart: unless-stopped
-    depends_on:
-      - postgres
-      - kafka
-      
+  # PostgreSQL database service with pgvector extension
   postgres:
-    image: postgres:14-alpine
+    image: pgvector/pgvector:pg14
     ports:
       - "5432:5432"
     environment:
@@ -44,46 +20,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  # Zookeeper service for Kafka
-  zookeeper:
-    image: confluentinc/cp-zookeeper:6.2.0
-    ports:
-      - "2181:2181"
-    environment:
-      - ZOOKEEPER_CLIENT_PORT=2181
-      - ZOOKEEPER_TICK_TIME=2000
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-
-  # Kafka service
-  kafka:
-    image: confluentinc/cp-kafka:6.2.0
-    ports:
-      - "9092:9092"
-      - "29092:29092"
-    environment:
-      - KAFKA_BROKER_ID=1
-      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
-      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
-    depends_on:
-      - zookeeper
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
 volumes:
   postgres_data:

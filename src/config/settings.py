@@ -12,22 +12,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / ".env")
 
 
-class APISettings(BaseModel):
-    """Настройки конфигурации API-сервера."""
-
-    host: str = Field(default=os.getenv("API_HOST", "0.0.0.0"))
-    port: int = Field(default=int(os.getenv("API_PORT", "8000")))
-    debug: bool = Field(default=os.getenv("API_DEBUG", "false").lower() == "true")
 
 
-class GigachatSettings(BaseModel):
-    """Настройки конфигурации API Gigachat."""
+class OllamaSettings(BaseModel):
+    """Настройки конфигурации Ollama API."""
 
-    api_key: str = Field(default=os.getenv("GIGACHAT_API_KEY", ""))
-    credentials_path: Optional[str] = Field(default=os.getenv("GIGACHAT_CREDENTIALS_PATH", None))
-    model: str = Field(default=os.getenv("GIGACHAT_MODEL", "GigaChat-Pro"))
-    temperature: float = Field(default=float(os.getenv("GIGACHAT_TEMPERATURE", "0.7")))
-    max_tokens: int = Field(default=int(os.getenv("GIGACHAT_MAX_TOKENS", "2048")))
+    base_url: str = Field(default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
+    model: str = Field(default=os.getenv("OLLAMA_MODEL", "llama2"))
+    temperature: float = Field(default=float(os.getenv("OLLAMA_TEMPERATURE", "0.7")))
+    top_k: int = Field(default=int(os.getenv("OLLAMA_TOP_K", "10")))
+    top_p: float = Field(default=float(os.getenv("OLLAMA_TOP_P", "0.9")))
+    repeat_penalty: float = Field(default=float(os.getenv("OLLAMA_REPEAT_PENALTY", "1.1")))
+    max_tokens: int = Field(default=int(os.getenv("OLLAMA_MAX_TOKENS", "2048")))
 
 
 class LoggingSettings(BaseModel):
@@ -56,25 +52,31 @@ class DatabaseSettings(BaseModel):
         return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
 
 
-class KafkaSettings(BaseModel):
-    """Настройки конфигурации Kafka."""
+class EmbeddingsSettings(BaseModel):
+    """Настройки конфигурации эмбеддингов."""
+    
+    # Тип эмбеддингов по умолчанию: "huggingface" или "gigachat"
+    default_type: str = Field(default=os.getenv("DEFAULT_EMBEDDINGS_TYPE", "huggingface"))
+    
 
-    bootstrap_servers: str = Field(default=os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"))
-    topic: str = Field(default=os.getenv("KAFKA_TOPIC", "sql-generator-requests"))
-    group_id: str = Field(default=os.getenv("KAFKA_GROUP_ID", "sql-generator-group"))
-    auto_offset_reset: str = Field(default=os.getenv("KAFKA_AUTO_OFFSET_RESET", "earliest"))
-    enable_auto_commit: bool = Field(default=os.getenv("KAFKA_ENABLE_AUTO_COMMIT", "true").lower() == "true")
-    consumer_timeout_ms: int = Field(default=int(os.getenv("KAFKA_CONSUMER_TIMEOUT_MS", "1000")))
+class GigaChatSettings(BaseModel):
+    """Настройки конфигурации GigaChat API."""
+    
+    api_key: Optional[str] = Field(default=os.getenv("GIGACHAT_API_KEY", None))
+    base_url: str = Field(default=os.getenv("GIGACHAT_BASE_URL", "https://gigachat.api.url"))
+    model: str = Field(default=os.getenv("GIGACHAT_MODEL", "GigaChat"))
+    temperature: float = Field(default=float(os.getenv("GIGACHAT_TEMPERATURE", "0.7")))
+    max_tokens: int = Field(default=int(os.getenv("GIGACHAT_MAX_TOKENS", "2048")))
 
 
 class Settings(BaseModel):
     """Глобальные настройки приложения."""
 
-    api: APISettings = Field(default_factory=APISettings)
-    gigachat: GigachatSettings = Field(default_factory=GigachatSettings)
+    ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
-    kafka: KafkaSettings = Field(default_factory=KafkaSettings)
+    embeddings: EmbeddingsSettings = Field(default_factory=EmbeddingsSettings)
+    gigachat: GigaChatSettings = Field(default_factory=GigaChatSettings)
 
     def dict_config(self) -> Dict[str, Any]:
         """Преобразовать настройки в словарь."""

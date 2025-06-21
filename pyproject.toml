@@ -1,20 +1,29 @@
 [project]
 name = "extract-parameter-agent"
 version = "0.1.0"
-description = "Production-ready AI agent application using Gigachat"
+description = "Production-ready AI agent application using Ollama"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "gigachat",
     "pydantic",
     "python-dotenv",
     "loguru",
     "pg8000",
-    "aiokafka",
     "pytest",
     "httpx",
-    "allure-pytest",
     "asyncpg>=0.30.0",
+    "langchain>=0.3.25",
+    "langchain-core>=0.3.63",
+    "langchain-community>=0.3.24",
+    "langchain-mistralai>=0.2.10",
+    "langchain-ollama>=0.3.3",
+    "faiss-cpu>=1.11.0",
+    "sentence-transformers>=4.1.0",
+    "pandas>=2.3.0",
+    "langchain-postgres>=0.0.13",
+    "pgvector>=0.3.6",
+    "psycopg2-binary>=2.9.10",
+    "langchain-gigachat>=0.3.10",
 ]
 
 [project.optional-dependencies]
@@ -36,7 +45,3 @@ target-version = ["py313"]
 [tool.isort]
 profile = "black"
 line_length = 100
-
-[tool.pytest.ini_options]
-addopts = "--alluredir=allure-results"
-allure_report_dir = "allure-report"
