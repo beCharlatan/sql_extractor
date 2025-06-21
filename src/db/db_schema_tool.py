@@ -1,6 +1,6 @@
 """Инструмент для работы со схемой базы данных для ИИ-агента."""
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from loguru import logger
 
 from src.db.base_db_client import BaseDBClient

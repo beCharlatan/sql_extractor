@@ -28,18 +28,6 @@ class AppError(Exception):
         }
 
 
-class GigachatAPIError(AppError):
-    """Исключение для ошибок Gigachat API."""
-
-    def __init__(
-        self,
-        message: str,
-        error_code: int = 502,
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(message, error_code, details)
-
-
 class ValidationError(AppError):
     """Исключение для ошибок валидации ввода."""
 
@@ -49,28 +37,6 @@ class ValidationError(AppError):
         details: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, 400, details)
-
-
-class AuthenticationError(AppError):
-    """Исключение для ошибок аутентификации."""
-
-    def __init__(
-        self,
-        message: str = "Authentication failed",
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(message, 401, details)
-
-
-class NotFoundError(AppError):
-    """Исключение для ошибок отсутствия ресурса."""
-
-    def __init__(
-        self,
-        message: str = "Resource not found",
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(message, 404, details)
 
 
 class SQLGenerationError(AppError):
@@ -84,45 +50,12 @@ class SQLGenerationError(AppError):
         super().__init__(message, 500, details)
 
 
-class InvalidSQLError(ValidationError):
-    """Исключение для неверного синтаксиса SQL."""
-
-    def __init__(
-        self,
-        message: str = "Invalid SQL syntax",
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(message, details)
-
-
-class InvalidTableDDLError(ValidationError):
-    """Исключение для неверного DDL таблицы."""
-
-    def __init__(
-        self,
-        message: str = "Invalid table DDL",
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(message, details)
-
-
 class DatabaseError(AppError):
     """Исключение для ошибок, связанных с базой данных."""
 
     def __init__(
         self,
         message: str = "Database error",
-        details: Optional[Dict[str, Any]] = None,
-    ):
-        super().__init__(message, 500, details)
-
-
-class KafkaError(AppError):
-    """Исключение для ошибок, связанных с Kafka."""
-
-    def __init__(
-        self,
-        message: str = "Kafka error",
         details: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, 500, details)
