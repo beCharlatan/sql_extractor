@@ -40,9 +40,3 @@ allure-results.zip
 # OS specific files
 .DS_Store
 Thumbs.db
-
-docs/
-
-main.build/
-main.dist/
-main.bin

@@ -1,6 +1,6 @@
-"""Реализация ИИ-агента с использованием LangChain и локальной модели Ollama."""
+"""Реализация ИИ-агента с использованием LangChain и различных моделей (локальных и облачных)."""
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Type
 
 from loguru import logger
 from langchain.agents import create_react_agent, AgentExecutor
@@ -8,9 +8,10 @@ from langchain.prompts import PromptTemplate
 from langchain.tools import BaseTool
 from langchain_core.language_models import BaseLanguageModel
 from langchain_community.llms import Ollama
+from langchain_gigachat import GigaChat
 from langchain.callbacks.base import BaseCallbackHandler
 
-from src.config.settings import settings
+from src.config.settings import settings, AgentType
 from src.tools.okved_tool import get_okved_tool
 from src.tools.okato_tool import get_okato_tool
 from src.tools.oktmo_tool import get_oktmo_tool
@@ -172,6 +173,85 @@ class BaseAgent(ABC):
         pass
 
 
+class GigaChatAgent(BaseAgent):
+    """ИИ-агент на основе LangChain и облачной модели GigaChat."""
+
+    def __init__(self, model: Optional[str] = None, tools: Optional[List[BaseTool]] = None):
+        """Инициализация агента GigaChat.
+
+        Аргументы:
+            model: Название модели GigaChat. По умолчанию используется модель из настроек.
+            tools: Список инструментов для агента.
+        """
+        self.model_name = model or settings.gigachat.model
+        # Если инструменты не указаны, используем стандартные
+        default_tools = [get_okved_tool(), get_okato_tool(), get_oktmo_tool(), get_table_schema_tool(), get_table_columns_tool()]
+        super().__init__(tools or default_tools)
+        self.llm = self._create_llm()
+        self._create_agent_executor(self.llm)
+        logger.info(f"Initialized GigaChatAgent with model {self.model_name} and {len(self.tools)} tools")
+
+    def _create_llm(self) -> BaseLanguageModel:
+        """Создание модели языка GigaChat для использования агентом.
+        
+        Возвращает:
+            Модель языка GigaChat.
+        """
+        return GigaChat(
+            api_key=settings.gigachat.api_key,
+            base_url=settings.gigachat.base_url,
+            model=self.model_name,
+            temperature=settings.gigachat.temperature,
+            max_tokens=settings.gigachat.max_tokens,
+            verify_ssl_certs=False
+        )
+        
+    async def process_query(self, query: str) -> str:
+        """Обработка запроса пользователя.
+        
+        Аргументы:
+            query: Текст запроса.
+            
+        Возвращает:
+            Результат обработки запроса.
+        """
+        logger.info(f"Processing query: {query}...")
+        try:
+            # Создаем обработчик для остановки
+            answer_stop_handler = AnswerStopHandler()
+            
+            # Выполняем запрос с обработчиком
+            try:
+                result = await self.agent_executor.ainvoke(
+                    {"input": query},
+                    callbacks=[answer_stop_handler]
+                )
+                
+                # Проверяем, был ли агент остановлен по ключевому слову
+                if answer_stop_handler.stopped:
+                    logger.info("Агент был остановлен по ключевому слову 'Ответ:'")
+                    # Если есть извлеченный ответ, используем его
+                    if answer_stop_handler.answer_text:
+                        return answer_stop_handler.answer_text
+                
+                # Если нет извлеченного ответа, используем результат агента
+                return result["output"]
+            except KeyboardInterrupt:
+                # Обрабатываем прерывание пользователем
+                logger.info("Выполнение агента прервано пользователем")
+                # Если есть извлеченный ответ, возвращаем его
+                if answer_stop_handler.answer_text:
+                    return answer_stop_handler.answer_text
+                # Иначе возвращаем частичный результат
+                return f"Запрос был прерван. Частичный результат:\n{answer_stop_handler.full_text}"
+        except Exception as e:
+            logger.error(f"Error processing query: {str(e)}")
+            # Если есть извлеченный ответ, возвращаем его даже при ошибке
+            if 'answer_stop_handler' in locals() and answer_stop_handler.answer_text:
+                return answer_stop_handler.answer_text
+            raise
+
+
 class OllamaAgent(BaseAgent):
     """ИИ-агент на основе LangChain и локальной модели Ollama."""
 
@@ -252,5 +332,18 @@ class OllamaAgent(BaseAgent):
             raise
 
 
-# Для обратной совместимости
-Agent = OllamaAgent
+def get_agent_class() -> Type[BaseAgent]:
+    """Возвращает класс агента в зависимости от настроек.
+    
+    Возвращает:
+        Класс агента для использования (OllamaAgent или GigaChatAgent).
+    """
+    agent_type = settings.default_agent_type
+    if agent_type == AgentType.GIGACHAT:
+        return GigaChatAgent
+    else:  # По умолчанию используем Ollama
+        return OllamaAgent
+
+
+# Для обратной совместимости и создания экземпляра агента
+Agent = get_agent_class()
