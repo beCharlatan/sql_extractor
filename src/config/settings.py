@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from enum import Enum
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
@@ -11,6 +12,11 @@ from pydantic import BaseModel, Field
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / ".env")
 
+
+class AgentType(str, Enum):
+    """Типы агентов для работы с LLM."""
+    OLLAMA = "ollama"
+    GIGACHAT = "gigachat"
 
 
 
@@ -72,6 +78,7 @@ class GigaChatSettings(BaseModel):
 class Settings(BaseModel):
     """Глобальные настройки приложения."""
 
+    default_agent_type: str = Field(default=os.getenv("DEFAULT_AGENT_TYPE", AgentType.OLLAMA))
     ollama: OllamaSettings = Field(default_factory=OllamaSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
